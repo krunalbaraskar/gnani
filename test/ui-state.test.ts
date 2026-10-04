@@ -133,3 +133,15 @@ describe('levelFromDb', () => {
     expect(levelFromDb(3)).toBe(1);
   });
 });
+
+describe('pending line', () => {
+  it('an empty partial clears the processing placeholder', () => {
+    let s = uiReducer(initialUiState, {
+      type: 'event',
+      event: { type: 'processing', speaker: 'me' },
+    });
+    expect(s.processing.me).toBe(true);
+    s = uiReducer(s, { type: 'event', event: { type: 'partial', speaker: 'me', text: '' } });
+    expect(s.processing.me).toBe(false);
+  });
+});

@@ -148,7 +148,6 @@ export class GnaniStream implements SttStream {
           if (event.final) this.settleInFlight();
           const receivedAt = this.now();
           const e2e = this.lastVoicedAt ? receivedAt - this.lastVoicedAt : undefined;
-          if (!event.text.trim()) break;
           this.cb.onTranscript({
             speaker: this.speaker,
             text: event.text,

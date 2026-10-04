@@ -149,7 +149,11 @@ export class CopilotSession {
       serverLatencyMs: t.serverLatencyMs,
       endToEndLatencyMs: t.endToEndLatencyMs,
     };
-    if (!seg.text) return;
+    if (!seg.text) {
+      // Nothing recognised (noise, a cough): clear the "…" placeholder.
+      this.deps.events.onPartial(t.speaker, '');
+      return;
+    }
 
     if (settings.echoDedupe) {
       if (seg.speaker === 'me') {

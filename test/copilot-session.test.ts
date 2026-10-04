@@ -148,6 +148,25 @@ describe('CopilotSession with fixtures and mock servers', () => {
     await session.stop();
   });
 
+  it('clears the pending line when a final transcript is empty', async () => {
+    const { fake, emit } = fakeStt();
+    const partials: [string, string][] = [];
+    const { events } = recordEvents();
+    const session = new CopilotSession({
+      stt: fake,
+      llm: () => {
+        throw new Error('unused');
+      },
+      settings: () => DEFAULT_SETTINGS,
+      events: { ...events, onPartial: (sp, t) => partials.push([sp, t]) },
+    });
+    session.start();
+    emit('them', '   ');
+    expect(partials).toEqual([['them', '']]);
+    expect(session.transcript.size).toBe(0);
+    await session.stop();
+  });
+
   it('keeps echoes when dedupe is off and gates silence when enabled', async () => {
     const { fake, emit, sent } = fakeStt();
     const settings: Settings = {

@@ -98,27 +98,32 @@ void app.whenReady().then(() => {
   });
 
   handle(IPC.updateSettings, (patch: unknown) => {
-    const next = settings.update(patch);
+    // The export folder is only ever set through the folder dialog in this process.
+    const { exportDir: _ignored, ...safe } = (
+      patch && typeof patch === 'object' ? patch : {}
+    ) as Record<string, unknown>;
+    const next = settings.update(safe);
     if (env.opaqueWindow) overlay?.setOpacity(next.overlayOpacity);
     return next;
   });
 
   handle(IPC.startSession, () => controller.start());
 
-  handle(IPC.stopSession, async (): Promise<StopResult> => {
+  /** Stops the session and exports it. `interactive` allows asking for a folder. */
+  async function finishSession(interactive: boolean): Promise<StopResult> {
     const record = await controller.stop();
     if (!record || !settings.get().autoExport) return {};
     let dir = settings.get().exportDir;
-    if (!dir) {
-      dir = (await chooseDir()) ?? '';
-      if (!dir) return { error: 'Not saved: no export folder chosen.' };
-    }
+    if (!dir && interactive) dir = (await chooseDir()) ?? '';
+    if (!dir) return { error: 'Not saved: no export folder chosen.' };
     try {
       return { exported: await writeSessionExport(dir, record) };
     } catch (err) {
       return { error: `Could not save the session: ${(err as Error).message}` };
     }
-  });
+  }
+
+  handle(IPC.stopSession, () => finishSession(true));
 
   async function chooseDir(): Promise<string | null> {
     const opts = {
@@ -211,8 +216,13 @@ void app.whenReady().then(() => {
   });
   register(HOTKEYS.clickThrough, toggleClickThrough);
 
-  app.on('before-quit', () => {
-    void controller.stop();
+  // Quitting mid-call still saves the transcript (if an export folder is set).
+  let quitting = false;
+  app.on('before-quit', (e) => {
+    if (quitting || !controller.running) return;
+    e.preventDefault();
+    quitting = true;
+    void finishSession(false).finally(() => app.quit());
   });
 });
 

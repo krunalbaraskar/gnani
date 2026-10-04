@@ -91,6 +91,10 @@ try {
   );
   check(isolated, 'renderer has no Node access (contextIsolation, no nodeIntegration)');
 
+  const after = await page.evaluate(() =>
+    window.bolo.updateSettings({ exportDir: '/somewhere/else' }),
+  );
+  check(after.exportDir === exportDir, 'renderer cannot change the export folder');
   await page.getByRole('button', { name: /I understand/ }).click();
   await page.getByTitle('Back to transcript').click();
   await page

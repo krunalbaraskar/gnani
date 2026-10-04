@@ -138,7 +138,12 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
         echoesRemoved: state.echoesRemoved + 1,
       };
     case 'partial':
-      return { ...state, partial: { ...state.partial, [e.speaker]: e.text } };
+      return {
+        ...state,
+        partial: { ...state.partial, [e.speaker]: e.text },
+        // An empty partial means "nothing pending" (e.g. an echo was dropped).
+        processing: e.text ? state.processing : { ...state.processing, [e.speaker]: false },
+      };
     case 'processing':
       return { ...state, processing: { ...state.processing, [e.speaker]: true } };
     case 'stt-status': {
