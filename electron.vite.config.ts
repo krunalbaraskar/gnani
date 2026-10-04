@@ -1,6 +1,20 @@
 import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import type { Plugin } from 'vite';
+
+/**
+ * The CSP in index.html forbids inline scripts, but Vite's dev server injects one
+ * (React Fast Refresh). Drop the CSP meta in dev only; production keeps it.
+ */
+function devOnlyRelaxCsp(): Plugin {
+  return {
+    name: 'bolo-dev-relax-csp',
+    apply: 'serve',
+    transformIndexHtml: (html) =>
+      html.replace(/<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>/, ''),
+  };
+}
 
 export default defineConfig({
   main: {
@@ -19,8 +33,11 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
-    plugins: [react()],
+    plugins: [react(), devOnlyRelaxCsp()],
     worker: { format: 'es' },
-    build: { rollupOptions: { input: { index: resolve('src/renderer/index.html') } } },
+    build: {
+      minify: true,
+      rollupOptions: { input: { index: resolve('src/renderer/index.html') } },
+    },
   },
 });

@@ -6,12 +6,16 @@
  * instead of aliasing into the speech band. State is carried between calls, so
  * feeding audio in arbitrary block sizes gives the same output as one big block.
  */
+const TABLE_RES = 512;
+
 export class StreamingResampler {
   readonly inputRate: number;
   readonly outputRate: number;
   private readonly step: number; // input samples per output sample
   private readonly cutoff: number; // normalised to input Nyquist, 0..1
   private readonly halfTaps: number;
+  /** Kernel sampled every 1/TABLE_RES input samples over [-halfTaps, halfTaps]. */
+  private readonly table: Float32Array;
   private history: Float32Array = new Float32Array(0);
   /** Absolute input-sample position of history[0]. */
   private historyStart = 0;
@@ -26,6 +30,10 @@ export class StreamingResampler {
     // 0.95 leaves a little transition band below Nyquist.
     this.cutoff = Math.min(1, outputRate / inputRate) * 0.95;
     this.halfTaps = Math.ceil(halfTaps / Math.min(1, this.cutoff));
+    this.table = new Float32Array(2 * this.halfTaps * TABLE_RES + 2);
+    for (let i = 0; i < this.table.length; i++) {
+      this.table[i] = this.exactKernel(i / TABLE_RES - this.halfTaps);
+    }
   }
 
   process(input: Float32Array): Float32Array {
@@ -69,7 +77,16 @@ export class StreamingResampler {
     return norm === 0 ? 0 : acc / norm;
   }
 
+  /** Table lookup with linear interpolation: ~10× cheaper than sin/cos per tap. */
   private kernel(x: number): number {
+    const f = (x + this.halfTaps) * TABLE_RES;
+    if (f < 0 || f >= this.table.length - 1) return 0;
+    const i = Math.floor(f);
+    const a = this.table[i]!;
+    return a + (this.table[i + 1]! - a) * (f - i);
+  }
+
+  private exactKernel(x: number): number {
     const c = this.cutoff;
     const sinc = x === 0 ? 1 : Math.sin(Math.PI * c * x) / (Math.PI * c * x);
     // Blackman window over [-halfTaps, halfTaps].
