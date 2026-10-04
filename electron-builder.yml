@@ -1,0 +1,39 @@
+# Windows installer config. Build on Windows with: npm run dist:win
+# Output: release/Bolo-Setup-<version>.exe (unsigned — SmartScreen will warn).
+appId: ai.bolo.copilot
+productName: Bolo
+copyright: Copyright © 2026 Krunal Baraskar
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the compiled app goes into the package; sources, tests and fixtures stay out.
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+asar: true
+# ws is pure JS (its optional native addons aren't installed), so nothing to rebuild.
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: Bolo-Setup-${version}.${ext}
+  # Bolo needs no admin rights; it installs per user.
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Bolo
+  # Keep settings and %APPDATA%\Bolo\.env across reinstalls.
+  deleteAppDataOnUninstall: false
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
