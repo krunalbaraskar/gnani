@@ -5,7 +5,7 @@
  *
  *   npm run build
  *   npm i --no-save playwright && npx playwright install chromium
- *   node scripts/ui-smoke.mjs            # screenshots go to out/ui-smoke/
+ *   node scripts/ui-smoke.mjs            # screenshots go to test-results/ui-smoke/
  *
  * Set CHROMIUM_PATH to use an existing Chromium/Chrome binary instead.
  */
@@ -17,7 +17,7 @@ import { join, extname } from 'node:path';
 const repo = join(import.meta.dirname, '..');
 const root = join(repo, 'out', 'renderer');
 const fixtures = join(repo, 'test', 'fixtures');
-const shots = join(repo, 'out', 'ui-smoke');
+const shots = join(repo, 'test-results', 'ui-smoke');
 mkdirSync(shots, { recursive: true });
 const shot = (name) => ({ path: join(shots, name) });
 const types = {

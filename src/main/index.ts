@@ -38,6 +38,11 @@ const log = consoleLogger;
 let overlay: BrowserWindow | null = null;
 let clickThrough = false;
 
+// Pin the name and settings folder (%APPDATA%\Bolo) however the app is launched;
+// otherwise `electron <script>` would use "Electron".
+app.setName('Bolo');
+app.setPath('userData', join(app.getPath('appData'), 'Bolo'));
+
 if (!app.requestSingleInstanceLock()) app.quit();
 
 app.on('second-instance', () => {

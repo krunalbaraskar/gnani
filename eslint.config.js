@@ -29,7 +29,7 @@ export default tseslint.config(
   },
   {
     // Runs in Node but evaluates callbacks inside the page.
-    files: ['scripts/ui-smoke.mjs'],
+    files: ['scripts/ui-smoke.mjs', 'scripts/e2e-electron.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
