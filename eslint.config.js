@@ -28,6 +28,11 @@ export default tseslint.config(
     },
   },
   {
+    // Runs in Node but evaluates callbacks inside the page.
+    files: ['scripts/ui-smoke.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
     files: ['src/renderer/src/audio/pcm-worklet.ts'],
     languageOptions: { globals: { ...globals.audioWorklet } },
   },

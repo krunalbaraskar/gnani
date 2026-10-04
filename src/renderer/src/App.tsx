@@ -120,7 +120,10 @@ export function App() {
                 setTimeout(() => void stop(), 2500);
               },
             })
-          : new LiveCapture(sink, { micDeviceId: settings.micDeviceId });
+          : new LiveCapture(sink, {
+              micDeviceId: settings.micDeviceId,
+              onWarning: (message) => dispatch({ type: 'notice', level: 'error', message }),
+            });
       await source.current.start();
       dispatch({ type: 'capturing', capturing: true });
     } catch (err) {

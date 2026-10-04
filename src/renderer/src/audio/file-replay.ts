@@ -41,8 +41,8 @@ export class FileReplay implements AudioSourceController {
       return FileAudioSource.fromWav(this.files[speaker]!, {
         speed: this.opts.speed,
         onFrame: (f) => {
-          this.sink.frame(speaker, f);
           if (++n % 3 === 0) this.sink.level(speaker, levelFromDb(frameLevelDb(f)));
+          this.sink.frame(speaker, f);
         },
         onEnd: () => {
           this.sink.level(speaker, 0);

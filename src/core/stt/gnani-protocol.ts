@@ -43,7 +43,7 @@ export interface GnaniLanguage {
 
 /** From SDK v0.7.9 STREAM_SUPPORTED_LANGUAGES, plus the two experimental options. */
 export const GNANI_LANGUAGES: readonly GnaniLanguage[] = [
-  { code: 'hi-IN', label: 'Hindi (handles Hinglish)', supportsItn: true },
+  { code: 'hi-IN', label: 'Hindi', supportsItn: true },
   { code: 'en-IN', label: 'English (India)', supportsItn: true },
   { code: 'ta-IN', label: 'Tamil' },
   { code: 'te-IN', label: 'Telugu' },

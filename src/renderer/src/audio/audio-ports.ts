@@ -23,11 +23,11 @@ export function openAudioPort(speaker: Speaker, timeoutMs = 3000): Promise<Messa
   });
 }
 
-/** Sends a frame, transferring its buffer (zero-copy). */
+/**
+ * Sends a frame to the main process. Copies rather than transfers: frames are only
+ * 1 KB, and transferring would detach a buffer the caller may still read (e.g. for
+ * the level meter).
+ */
 export function postFrame(port: MessagePort, frame: Uint8Array): void {
-  const buf =
-    frame.byteOffset === 0 && frame.byteLength === frame.buffer.byteLength
-      ? (frame.buffer as ArrayBuffer)
-      : (frame.slice().buffer as ArrayBuffer);
-  port.postMessage(buf, [buf]);
+  port.postMessage(frame.slice().buffer);
 }
