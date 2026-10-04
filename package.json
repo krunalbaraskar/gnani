@@ -24,7 +24,8 @@
     "test:watch": "vitest",
     "fixtures": "node scripts/gen-fixtures.ts",
     "demo-audio": "node scripts/make-demo-audio.ts",
-    "dist:win": "npm run build && electron-builder --win --config electron-builder.yml"
+    "dist:win": "npm run build && electron-builder --win --config electron-builder.yml",
+    "mock-gnani": "node scripts/mock-gnani.ts"
   },
   "dependencies": {
     "ws": "^8.22.0"
