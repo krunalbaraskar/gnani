@@ -106,5 +106,5 @@ writeFileSync(join(dir, 'me.wav'), encodeWav16([tracks.me], RATE));
 writeFileSync(join(dir, 'them.wav'), encodeWav16([tracks.them], RATE));
 writeFileSync(join(dir, 'script.json'), JSON.stringify(SCRIPT, null, 2));
 console.info(
-  `Wrote ${dir}\\me.wav and them.wav (${(tracks.me.length / RATE).toFixed(1)} s). Click "Demo" in Bolo.`,
+  `Wrote ${join(dir, 'me.wav')} and them.wav (${(tracks.me.length / RATE).toFixed(1)} s). Click "Demo" in Bolo.`,
 );
