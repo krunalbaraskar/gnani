@@ -55,6 +55,17 @@ export class SessionController {
     return this.session?.isRunning ?? false;
   }
 
+  get paused(): boolean {
+    return this.session?.isPaused ?? false;
+  }
+
+  setPaused(paused: boolean): void {
+    const s = this.session;
+    if (!s?.isRunning) return;
+    s.setPaused(paused);
+    this.emit({ type: 'paused', paused: s.isPaused });
+  }
+
   start(): StartResult {
     if (this.running) return { ok: true };
     const env = this.getEnv();
@@ -170,6 +181,7 @@ export class SessionController {
     if (!s) return null;
     this.session = null;
     const record = await s.stop();
+    this.emit({ type: 'paused', paused: false });
     this.emit({ type: 'session', running: false });
     return record;
   }

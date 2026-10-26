@@ -60,6 +60,7 @@ export class CopilotSession {
   private gates = new Map<Speaker, SilenceGate>();
   private record: SessionRecord;
   private running = false;
+  private pausedAt: number | null = null;
 
   constructor(deps: CopilotSessionDeps) {
     this.deps = deps;
@@ -75,6 +76,8 @@ export class CopilotSession {
       segments: [],
       suggestions: [],
       echoesRemoved: 0,
+      mode: s.mode,
+      pauses: [],
     };
     this.gloss = new GlossEngine(
       deps.llm,
@@ -106,6 +109,22 @@ export class CopilotSession {
     return this.running;
   }
 
+  get isPaused(): boolean {
+    return this.pausedAt !== null;
+  }
+
+  /** Off the record: audio is dropped before the STT until resumed. Streams stay open. */
+  setPaused(paused: boolean): void {
+    if (!this.running || paused === this.isPaused) return;
+    if (paused) {
+      this.pausedAt = this.now();
+      for (const speaker of SPEAKERS) this.deps.events.onPartial(speaker, '');
+    } else {
+      this.record.pauses!.push({ from: this.pausedAt!, to: this.now() });
+      this.pausedAt = null;
+    }
+  }
+
   start(): void {
     if (this.running) return;
     this.running = true;
@@ -129,7 +148,7 @@ export class CopilotSession {
   /** One 1024-byte PCM16 frame from the capture pipeline. */
   pushFrame(speaker: Speaker, frame: Uint8Array): void {
     const stream = this.streams.get(speaker);
-    if (!this.running || !stream) return;
+    if (!this.running || !stream || this.pausedAt !== null) return;
     if (!this.deps.settings().silenceGate) {
       stream.send(frame);
       return;
@@ -165,6 +184,7 @@ export class CopilotSession {
 
   async stop(): Promise<SessionRecord> {
     if (!this.running) return this.snapshot();
+    this.setPaused(false);
     this.running = false;
     // allSettled: a stream that fails to close must not skip the cancels below or lose the record.
     await Promise.allSettled([...this.streams.values()].map((s) => s.close()));
@@ -178,6 +198,8 @@ export class CopilotSession {
   snapshot(): SessionRecord {
     return {
       ...this.record,
+      mode: this.deps.settings().mode,
+      pauses: [...(this.record.pauses ?? [])],
       segments: this.transcript.all(),
       suggestions: [...this.engine.history],
     };
@@ -229,10 +251,15 @@ export class CopilotSession {
     this.transcript.add(seg);
     this.deps.events.onSegment(seg);
 
-    if (seg.speaker === 'them' && settings.explainThem) {
+    // Silent mode makes no AI request the user did not ask for.
+    if (seg.speaker === 'them' && settings.mode !== 'silent' && settings.explainThem) {
       this.gloss.enqueue(seg.id, seg.text, this.myLanguage());
     }
-    if (seg.speaker === 'them' && settings.autoSuggest && detectQuestion(seg.text).isQuestion) {
+    if (
+      seg.speaker === 'them' &&
+      settings.mode === 'active' &&
+      detectQuestion(seg.text).isQuestion
+    ) {
       // Built when it runs, so a held question is answered with the transcript as it is then.
       void this.engine.requestAuto(() => this.suggestRequest('auto', seg.text));
     }

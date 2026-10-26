@@ -1,4 +1,5 @@
 /** Types and channel names shared by main, preload and renderer. No runtime deps. */
+import type { MeetingSummary, MinutesProgressView } from './meeting.ts';
 import type { Settings } from './settings.ts';
 import type { Speaker, TranscriptSegment } from './transcript/types.ts';
 
@@ -16,6 +17,17 @@ export const IPC = {
   ask: 'bolo:ask',
   askScreen: 'bolo:ask-screen',
   requestMeaning: 'bolo:request-meaning',
+  setPaused: 'bolo:set-paused',
+  openLibrary: 'bolo:open-library',
+  listMeetings: 'bolo:list-meetings',
+  getMeeting: 'bolo:get-meeting',
+  updateMeeting: 'bolo:update-meeting',
+  deleteMeeting: 'bolo:delete-meeting',
+  writeMinutes: 'bolo:write-minutes',
+  cancelMinutes: 'bolo:cancel-minutes',
+  exportMeeting: 'bolo:export-meeting',
+  copyMinutes: 'bolo:copy-minutes',
+  emailMinutes: 'bolo:email-minutes',
   window: 'bolo:window',
   audioPort: 'bolo:audio-port',
   event: 'bolo:event',
@@ -59,6 +71,7 @@ export interface AppState {
   platform: string;
   clickThrough: boolean;
   sessionRunning: boolean;
+  sessionPaused: boolean;
   /** Where demo WAVs are looked for (see npm run demo-audio). */
   demoAudioDir: string;
   context: ContextView;
@@ -105,14 +118,29 @@ export type BoloEvent =
   | { type: 'suggestion-done'; suggestion: SuggestionView }
   | { type: 'click-through'; enabled: boolean }
   | { type: 'session'; running: boolean }
-  | { type: 'notice'; level: 'info' | 'error'; message: string };
+  | { type: 'paused'; paused: boolean }
+  | { type: 'notice'; level: 'info' | 'error'; message: string }
+  // Library window only.
+  | { type: 'meeting-updated'; summary: MeetingSummary }
+  | { type: 'meeting-deleted'; id: string }
+  | { type: 'minutes-progress'; id: string; progress: MinutesProgressView }
+  | { type: 'open-meeting'; id: string };
 
 export type StartResult = { ok: true } | { ok: false; error: string };
 
 export interface StopResult {
+  /** The meeting as saved in the library. */
+  meetingId?: string;
+  /** Also written to the export folder, when one is set. */
   exported?: { markdown: string; json: string };
+  /** Minutes are being written in the background. */
+  writingMinutes?: boolean;
   error?: string;
 }
+
+export type ExportFormat = 'md' | 'pdf';
+
+export type ExportResult = { path: string } | { error: string } | null;
 
 export type WindowCommand =
   | { kind: 'hide' }

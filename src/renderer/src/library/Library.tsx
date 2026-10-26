@@ -1,0 +1,550 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { markdownToHtml } from '../../../shared/markdown.ts';
+import type {
+  MeetingDetail,
+  MeetingSummary,
+  MinutesProgressView,
+} from '../../../shared/meeting.ts';
+import { formatClock } from '../../../shared/transcript/format.ts';
+import { Icon } from '../components/Icon.tsx';
+import { MODE_INFO } from '../components/Bar.tsx';
+
+type Tab = 'minutes' | 'transcript' | 'notes';
+
+function when(ms: number): string {
+  return new Date(ms).toLocaleString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function duration(ms: number): string {
+  const min = Math.round(ms / 60_000);
+  return min < 1 ? `${Math.round(ms / 1000)} s` : min < 60 ? `${min} min` : formatClock(ms);
+}
+
+/** Groups the list by day: Today, Yesterday, or the date. */
+function dayLabel(ms: number): string {
+  const d = new Date(ms);
+  const today = new Date();
+  const days = Math.round(
+    (new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000,
+  );
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function initialId(): string | null {
+  return /^#library\/(m\d+)$/.exec(window.location.hash)?.[1] ?? null;
+}
+
+/** Markdown from the model or the user, rendered by the escaping renderer. */
+function Rendered({ markdown }: { markdown: string }) {
+  const html = useMemo(() => markdownToHtml(markdown), [markdown]);
+  // markdownToHtml escapes all input; only its own tags reach the page.
+  return <div className="doc" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+export function Library() {
+  const [list, setList] = useState<MeetingSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string | null>(initialId);
+  const [detail, setDetail] = useState<MeetingDetail | null>(null);
+  const [progress, setProgress] = useState<Record<string, MinutesProgressView>>({});
+  const [tab, setTab] = useState<Tab>('minutes');
+  const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
+  const queryRef = useRef(query);
+  const selectedRef = useRef(selected);
+  queryRef.current = query;
+  selectedRef.current = selected;
+
+  const refreshList = useCallback(async () => {
+    setList(await window.bolo.listMeetings(queryRef.current));
+    setLoaded(true);
+  }, []);
+  const refreshDetail = useCallback(async (id: string | null) => {
+    setDetail(id ? await window.bolo.getMeeting(id) : null);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => void refreshList(), query ? 180 : 0);
+    return () => clearTimeout(t);
+  }, [query, refreshList]);
+
+  useEffect(() => {
+    void refreshDetail(selected);
+    setTab('minutes');
+  }, [selected, refreshDetail]);
+
+  // Open the newest meeting when nothing was asked for.
+  useEffect(() => {
+    if (!selected && !query && list[0]) setSelected(list[0].id);
+  }, [list, selected, query]);
+
+  useEffect(
+    () =>
+      window.bolo.onEvent((e) => {
+        switch (e.type) {
+          case 'meeting-updated':
+            void refreshList();
+            if (e.summary.id === selectedRef.current) void refreshDetail(e.summary.id);
+            if (e.summary.minutes !== 'writing')
+              setProgress(({ [e.summary.id]: _done, ...rest }) => rest);
+            break;
+          case 'meeting-deleted':
+            void refreshList();
+            if (e.id === selectedRef.current) setSelected(null);
+            break;
+          case 'minutes-progress':
+            setProgress((p) => ({ ...p, [e.id]: e.progress }));
+            break;
+          case 'open-meeting':
+            setQuery('');
+            setSelected(e.id);
+            break;
+          case 'notice':
+            setToast({ text: e.message, error: e.level === 'error' });
+            break;
+        }
+      }),
+    [refreshList, refreshDetail],
+  );
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), toast.error ? 8000 : 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const groups = useMemo(() => {
+    const out: { label: string; items: MeetingSummary[] }[] = [];
+    for (const m of list) {
+      // Search results are ordered by relevance, so they are not grouped by day.
+      const label = query ? 'Results' : dayLabel(m.startedAt);
+      if (out.at(-1)?.label === label) out.at(-1)!.items.push(m);
+      else out.push({ label, items: [m] });
+    }
+    return out;
+  }, [list, query]);
+
+  return (
+    <div className="library">
+      <aside className="lib-side">
+        <div className="lib-search">
+          <Icon name="search" size={14} />
+          <input
+            type="search"
+            placeholder="Search meetings, minutes, transcripts"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search meetings"
+          />
+        </div>
+        <nav className="lib-list" aria-label="Meetings">
+          {loaded && list.length === 0 && (
+            <p className="muted lib-empty-list">
+              {query ? 'No meeting mentions that.' : 'No meetings yet.'}
+            </p>
+          )}
+          {groups.map((g) => (
+            <section key={g.label}>
+              <h3>{g.label}</h3>
+              {g.items.map((m) => (
+                <button
+                  key={m.id}
+                  className={`lib-item ${m.id === selected ? 'on' : ''}`}
+                  onClick={() => setSelected(m.id)}
+                  aria-current={m.id === selected}
+                >
+                  <span className="lib-item-title">{m.title}</span>
+                  <span className="lib-item-meta">
+                    {new Date(m.startedAt).toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}{' '}
+                    · {duration(m.durationMs)}
+                    {m.minutes === 'writing' && <span className="badge busy">writing</span>}
+                    {m.minutes === 'failed' && <span className="badge bad">no minutes</span>}
+                    {m.actionItems > 0 && <span className="badge">{m.actionItems} to do</span>}
+                  </span>
+                  {m.snippet && <span className="lib-item-snippet">{m.snippet}</span>}
+                </button>
+              ))}
+            </section>
+          ))}
+        </nav>
+      </aside>
+
+      <main className="lib-main">
+        {detail ? (
+          <MeetingView
+            key={detail.id}
+            m={detail}
+            progress={progress[detail.id]}
+            tab={tab}
+            onTab={setTab}
+            onChanged={setDetail}
+            toast={(text, error) => setToast({ text, error })}
+          />
+        ) : (
+          <div className="lib-empty">
+            <Icon name="book" size={40} />
+            <h2>
+              {loaded && list.length === 0 && !query ? 'Your meetings live here' : 'Pick a meeting'}
+            </h2>
+            <p className="muted">
+              When a meeting ends, Bolo saves the transcript on this computer and writes the
+              minutes: summary, decisions and action items. Start one from the bar at the top of
+              your screen.
+            </p>
+          </div>
+        )}
+      </main>
+
+      {toast && (
+        <div className={`lib-toast ${toast.error ? 'error' : ''}`} role="status">
+          {toast.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ViewProps {
+  m: MeetingDetail;
+  progress?: MinutesProgressView;
+  tab: Tab;
+  onTab: (t: Tab) => void;
+  onChanged: (m: MeetingDetail) => void;
+  toast: (text: string, error?: boolean) => void;
+}
+
+function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
+  const [title, setTitle] = useState(m.title);
+  useEffect(() => setTitle(m.title), [m.title]);
+  const saveTitle = async () => {
+    const t = title.trim();
+    if (!t || t === m.title) return setTitle(m.title);
+    const next = await window.bolo.updateMeeting(m.id, { title: t });
+    if (next) onChanged(next);
+  };
+
+  return (
+    <article className="meeting">
+      <header className="meeting-head">
+        <input
+          className="meeting-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => void saveTitle()}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          aria-label="Meeting title"
+          maxLength={200}
+        />
+        <div className="meeting-meta muted">
+          {when(m.startedAt)} · {duration(m.durationMs)} · {m.lines} lines
+          {m.mode && <> · {MODE_INFO[m.mode]?.label ?? m.mode} mode</>}
+          {m.pauses.length > 0 && <> · paused {m.pauses.length}×</>}
+        </div>
+        <button
+          className="ghost small danger"
+          onClick={() => void window.bolo.deleteMeeting(m.id)}
+          title="Delete this meeting from this computer"
+        >
+          <Icon name="trash" size={14} /> Delete
+        </button>
+      </header>
+
+      <nav className="tabs lib-tabs" role="tablist">
+        {(
+          [
+            ['minutes', 'Minutes'],
+            ['transcript', 'Transcript'],
+            ['notes', 'Notes & answers'],
+          ] as [Tab, string][]
+        ).map(([t, label]) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            className={tab === t ? 'on' : ''}
+            onClick={() => onTab(t)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="meeting-body">
+        {tab === 'minutes' && (
+          <MinutesPane m={m} progress={progress} onChanged={onChanged} toast={toast} />
+        )}
+        {tab === 'transcript' && <TranscriptPane m={m} />}
+        {tab === 'notes' && <NotesPane m={m} onChanged={onChanged} />}
+      </div>
+    </article>
+  );
+}
+
+function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 'onTab'>) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const minutes = m.minutesView;
+
+  if (m.minutes === 'writing') {
+    return (
+      <div className="minutes">
+        <div className="minutes-bar">
+          <span className="busy-dot" />
+          <span>
+            {progress?.stage === 'notes'
+              ? `Reading the meeting, part ${progress.part} of ${progress.parts}…`
+              : 'Writing the minutes…'}
+          </span>
+          <span className="spacer" />
+          <button className="ghost small" onClick={() => window.bolo.cancelMinutes(m.id)}>
+            Cancel
+          </button>
+        </div>
+        {progress?.stage === 'writing' && <Rendered markdown={progress.text} />}
+      </div>
+    );
+  }
+
+  if (!minutes) {
+    return (
+      <div className="minutes-empty">
+        {m.minutesError ? (
+          <p className="error-text">Minutes were not written: {m.minutesError}</p>
+        ) : (
+          <p className="muted">No minutes for this meeting yet.</p>
+        )}
+        <button className="primary" onClick={() => window.bolo.writeMinutes(m.id)}>
+          <Icon name="sparkle" size={14} /> {m.minutesError ? 'Try again' : 'Write minutes'}
+        </button>
+        <p className="muted small">
+          Bolo sends the transcript and your notes to your AI model and writes a summary, key
+          points, decisions, action items and open questions.
+        </p>
+      </div>
+    );
+  }
+
+  const save = async () => {
+    const next = await window.bolo.updateMeeting(m.id, { minutes: draft });
+    if (next) onChanged(next);
+    setEditing(false);
+  };
+  const exportAs = async (format: 'md' | 'pdf') => {
+    const r = await window.bolo.exportMeeting(m.id, format);
+    if (r && 'path' in r) toast(`Saved ${r.path}`);
+    else if (r) toast(r.error, true);
+  };
+
+  return (
+    <div className="minutes">
+      <div className="minutes-bar">
+        {editing ? (
+          <>
+            <button className="primary small" onClick={() => void save()}>
+              Save
+            </button>
+            <button className="ghost small" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+            <span className="muted small">Markdown: # heading, - bullet, - [ ] action item</span>
+          </>
+        ) : (
+          <>
+            <button
+              className="ghost small"
+              onClick={() => {
+                setDraft(minutes.markdown);
+                setEditing(true);
+              }}
+            >
+              <Icon name="edit" size={14} /> Edit
+            </button>
+            <button
+              className="ghost small"
+              onClick={() =>
+                void window.bolo
+                  .copyMinutes(m.id)
+                  .then((ok) => ok && toast('Copied. Paste into an email or chat.'))
+              }
+            >
+              <Icon name="copy" size={14} /> Copy
+            </button>
+            <button className="ghost small" onClick={() => window.bolo.emailMinutes(m.id)}>
+              <Icon name="mail" size={14} /> Email
+            </button>
+            <button className="ghost small" onClick={() => void exportAs('pdf')}>
+              <Icon name="download" size={14} /> PDF
+            </button>
+            <button className="ghost small" onClick={() => void exportAs('md')}>
+              <Icon name="download" size={14} /> Markdown
+            </button>
+            <span className="spacer" />
+            <button
+              className="ghost small"
+              title={
+                minutes.edited
+                  ? 'Write them again from the transcript. Your edits will be replaced.'
+                  : 'Write them again from the transcript and your notes'
+              }
+              onClick={() => {
+                if (!minutes.edited || window.confirm('Replace your edited minutes?'))
+                  window.bolo.writeMinutes(m.id);
+              }}
+            >
+              <Icon name="sparkle" size={14} /> Rewrite
+            </button>
+          </>
+        )}
+      </div>
+
+      {!editing && minutes.unverifiedFigures.length > 0 && (
+        <p className="figure-warning" role="note">
+          Check {minutes.unverifiedFigures.length === 1 ? 'this figure' : 'these figures'}:{' '}
+          <strong>{minutes.unverifiedFigures.join(', ')}</strong>. Nobody said{' '}
+          {minutes.unverifiedFigures.length === 1 ? 'it' : 'them'} in the meeting. Edit the minutes
+          to fix or confirm.
+        </p>
+      )}
+
+      {editing ? (
+        <textarea
+          className="minutes-editor"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          spellCheck
+          autoFocus
+          aria-label="Edit minutes"
+        />
+      ) : (
+        <Rendered markdown={minutes.markdown} />
+      )}
+      {!editing && (
+        <p className="muted small">
+          Written {when(minutes.generatedAt)}
+          {minutes.edited ? ', edited by you' : ' from the transcript. Check before sharing.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TranscriptPane({ m }: { m: MeetingDetail }) {
+  const items = useMemo(() => {
+    type Item =
+      | { kind: 'line'; at: number; seg: MeetingDetail['segments'][number] }
+      | { kind: 'answer'; at: number; s: MeetingDetail['suggestions'][number] }
+      | { kind: 'pause'; at: number; to: number };
+    const out: Item[] = [
+      ...m.segments.map((seg) => ({ kind: 'line' as const, at: seg.at, seg })),
+      ...m.suggestions
+        .filter((s) => s.text && !s.error && !s.cancelled)
+        .map((s) => ({ kind: 'answer' as const, at: s.startedAt, s })),
+      ...m.pauses.map((p) => ({ kind: 'pause' as const, at: p.from, to: p.to })),
+    ];
+    return out.sort((a, b) => a.at - b.at);
+  }, [m]);
+  if (!m.segments.length) return <p className="muted">Nothing was transcribed.</p>;
+  return (
+    <div className="lib-transcript">
+      {items.map((it, i) =>
+        it.kind === 'line' ? (
+          <div key={it.seg.id} className={`tline ${it.seg.speaker}`}>
+            <span className="t">{formatClock(it.at - m.startedAt)}</span>
+            <span className="who">{it.seg.speaker === 'me' ? 'Me' : 'Them'}</span>
+            <span className="text">
+              {it.seg.text}
+              {it.seg.meaning && <em className="meaning">{it.seg.meaning}</em>}
+            </span>
+          </div>
+        ) : it.kind === 'answer' ? (
+          <div key={it.s.id} className="tline bolo">
+            <span className="t">{formatClock(it.at - m.startedAt)}</span>
+            <span className="who">Bolo</span>
+            <span className="text">
+              {it.s.asked && <span className="muted">You asked: {it.s.asked} — </span>}
+              {it.s.text.replace(/```\w*\n?/g, '')}
+              {!!it.s.sources?.length && (
+                <span className="muted"> (from {it.s.sources.join(', ')})</span>
+              )}
+            </span>
+          </div>
+        ) : (
+          <div key={`p${i}`} className="tline pause muted">
+            <span className="t">{formatClock(it.at - m.startedAt)}</span>
+            <span className="text">Paused for {duration(it.to - it.at)} (off the record)</span>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+function NotesPane({ m, onChanged }: { m: MeetingDetail; onChanged: (m: MeetingDetail) => void }) {
+  const [notes, setNotes] = useState(m.notes);
+  const [saved, setSaved] = useState(true);
+  useEffect(() => setNotes(m.notes), [m.notes]);
+  const save = async () => {
+    if (notes === m.notes) return;
+    const next = await window.bolo.updateMeeting(m.id, { notes });
+    if (next) onChanged(next);
+    setSaved(true);
+  };
+  const answers = m.suggestions.filter((s) => s.text && !s.error && !s.cancelled);
+  return (
+    <div className="notes">
+      <label>
+        My notes
+        <textarea
+          rows={8}
+          value={notes}
+          placeholder="Anything the transcript missed. Rewrite the minutes to include it."
+          onChange={(e) => {
+            setNotes(e.target.value);
+            setSaved(false);
+          }}
+          onBlur={() => void save()}
+        />
+      </label>
+      <p className="muted small">
+        {saved ? 'Saved on this computer.' : 'Saves when you click away.'}
+      </p>
+      {m.agenda && (
+        <>
+          <h3>About this meeting</h3>
+          <p>{m.agenda}</p>
+        </>
+      )}
+      <h3>What Bolo answered during the meeting</h3>
+      {answers.length === 0 ? (
+        <p className="muted">No answers in this meeting.</p>
+      ) : (
+        <ul className="answers">
+          {answers.map((s) => (
+            <li key={s.id}>
+              <span className="muted small">
+                {formatClock(s.startedAt - m.startedAt)} ·{' '}
+                {s.asked
+                  ? `You asked: ${s.asked}`
+                  : s.question
+                    ? `They asked: ${s.question}`
+                    : 'Suggested reply'}
+              </span>
+              <span>{s.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

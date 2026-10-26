@@ -20,8 +20,9 @@ export function ConsentNotice({ onAccept, sttName }: { onAccept: () => void; stt
         In many places this is required by law, and it is the right thing to do.
       </p>
       <p className="muted">
-        Transcripts are saved only to the folder you choose. Use synthetic or consented
-        conversations for demos.
+        Each meeting&apos;s transcript, notes and minutes are saved on this computer, in Bolo&apos;s
+        meeting library, until you delete them. To write the minutes, the transcript is sent to your
+        AI model once more after the meeting. Use synthetic or consented conversations for demos.
       </p>
       <button className="primary" onClick={onAccept} autoFocus>
         I understand — I will ask for consent

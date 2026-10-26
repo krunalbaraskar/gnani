@@ -9,6 +9,8 @@ export interface Notice {
   id: number;
   level: 'info' | 'error';
   message: string;
+  /** A saved meeting the notice can open in the library. */
+  meetingId?: string;
 }
 
 export type Tab = 'live' | 'transcript' | 'context' | 'settings';
@@ -16,6 +18,8 @@ export type Tab = 'live' | 'transcript' | 'context' | 'settings';
 export interface UiState {
   app: AppState | null;
   running: boolean;
+  /** Off the record: listening is paused. */
+  paused: boolean;
   starting: boolean;
   capturing: boolean;
   segments: TranscriptSegment[];
@@ -42,7 +46,7 @@ export type UiAction =
   | { type: 'start-failed'; error: string }
   | { type: 'capturing'; capturing: boolean }
   | { type: 'level'; speaker: Speaker; level: number }
-  | { type: 'notice'; level: 'info' | 'error'; message: string }
+  | { type: 'notice'; level: 'info' | 'error'; message: string; meetingId?: string }
   | { type: 'dismiss-notice' }
   | { type: 'panel'; panel: Tab }
   | { type: 'toggle-open' }
@@ -53,6 +57,7 @@ const idle = (speaker: Speaker): SttStatusView => ({ speaker, state: 'idle' });
 export const initialUiState: UiState = {
   app: null,
   running: false,
+  paused: false,
   starting: false,
   capturing: false,
   segments: [],
@@ -78,6 +83,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
         ...state,
         app: action.app,
         running: action.app.sessionRunning,
+        paused: action.app.sessionPaused,
         clickThrough: action.app.clickThrough,
         // First run: show settings so the consent notice and keys are seen.
         panel: action.app.settings.consentAcknowledged ? state.panel : 'settings',
@@ -110,7 +116,15 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
     case 'level':
       return { ...state, levels: { ...state.levels, [action.speaker]: action.level } };
     case 'notice':
-      return { ...state, notice: { id: ++noticeId, level: action.level, message: action.message } };
+      return {
+        ...state,
+        notice: {
+          id: ++noticeId,
+          level: action.level,
+          message: action.message,
+          meetingId: action.meetingId,
+        },
+      };
     case 'dismiss-notice':
       return { ...state, notice: null };
     case 'panel':
@@ -203,8 +217,20 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
         stt: e.running ? state.stt : { me: idle('me'), them: idle('them') },
         app: state.app ? { ...state.app, sessionRunning: e.running } : state.app,
       };
+    case 'paused':
+      return {
+        ...state,
+        paused: e.paused,
+        partial: e.paused ? { me: '', them: '' } : state.partial,
+        app: state.app ? { ...state.app, sessionPaused: e.paused } : state.app,
+      };
     case 'notice':
       return { ...state, notice: { id: ++noticeId, level: e.level, message: e.message } };
+    case 'meeting-updated':
+    case 'meeting-deleted':
+    case 'minutes-progress':
+    case 'open-meeting':
+      return state; // for the library window
   }
 }
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppState } from '../../../shared/ipc.ts';
-import type { OutputLanguage, Settings } from '../../../shared/settings.ts';
+import { MEETING_MODES, type OutputLanguage, type Settings } from '../../../shared/settings.ts';
 import type { ReplayFiles } from '../audio/file-replay.ts';
+import { MODE_INFO } from './Bar.tsx';
 
 export type ReplaySelection = ReplayFiles & { meName?: string; themName?: string };
 
@@ -286,14 +287,15 @@ export function SettingsPanel({
             </label>
           ))}
         </div>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={s.autoSuggest}
-            onChange={(e) => onChange({ autoSuggest: e.target.checked })}
-          />
-          Suggest automatically when they ask a question
-        </label>
+        <label>During meetings</label>
+        <div className="radio-col">
+          {MEETING_MODES.map((m) => (
+            <label key={m}>
+              <input type="radio" checked={s.mode === m} onChange={() => onChange({ mode: m })} />
+              {MODE_INFO[m].hint}
+            </label>
+          ))}
+        </div>
         <label>
           Transcript sent to the AI: last {s.transcriptMinutes} min
           <input
@@ -347,14 +349,28 @@ export function SettingsPanel({
       </fieldset>
 
       <fieldset>
-        <legend>Export</legend>
+        <legend>After the meeting</legend>
+        <p className="muted small">
+          Every meeting is saved on this computer.{' '}
+          <button className="link" onClick={() => window.bolo.openLibrary()}>
+            Open Meetings
+          </button>
+        </p>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.autoMinutes}
+            onChange={(e) => onChange({ autoMinutes: e.target.checked })}
+          />
+          Write the minutes (summary, decisions, action items) as soon as it ends
+        </label>
         <label className="check">
           <input
             type="checkbox"
             checked={s.autoExport}
             onChange={(e) => onChange({ autoExport: e.target.checked })}
           />
-          Save transcript + suggestions (Markdown and JSON) when a session ends
+          Also save the transcript (Markdown and JSON) to a folder
         </label>
         <div className="row">
           <span className="path" title={s.exportDir}>

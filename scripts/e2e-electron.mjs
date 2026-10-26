@@ -40,6 +40,8 @@ writeFileSync(
     contextDir,
     contextNote: 'I sell paint to dealers',
     llmVisionModel: 'mock-vision',
+    mode: 'active',
+    myName: 'Krunal',
   }),
 );
 
@@ -162,6 +164,8 @@ try {
     .locator('input[type=file]')
     .nth(1)
     .setInputFiles(join(repo, 'test', 'fixtures', 'me.wav'));
+  await page.getByRole('button', { name: 'Mode: Active' }).waitFor();
+  check(true, 'mode chip shows Active');
   await page.getByRole('button', { name: 'Start' }).click();
   await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
   check(true, 'session started; the panel switched to Live');
@@ -228,7 +232,9 @@ try {
   check(lines.filter((l) => l === 'Me').length === 2, 'two Me lines (echo removed)');
   await shot('8-transcript');
 
-  await page.getByText(/^Saved /).waitFor({ timeout: 20000 });
+  const savedNotice = page.getByText(/^Meeting saved\. Writing the minutes/);
+  await savedNotice.waitFor({ timeout: 20000 });
+  check(true, 'meeting saved to the library and minutes started');
   const files = readdirSync(exportDir);
   console.info('  exported:', files);
   const md = files.find((f) => f.endsWith('.md'));
@@ -246,6 +252,54 @@ try {
     check(JSON.parse(saved).echoesRemoved === 1, 'export records the removed echo');
     check(!saved.includes('data:image'), 'no screenshot in the export');
   }
+  // ---- Meeting library ----
+  const meetingsDir = join(appData, 'Bolo', 'meetings');
+  const libraryOpened = app.waitForEvent('window');
+  await savedNotice.click();
+  const lib = await libraryOpened;
+  lib.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
+  await lib.getByText('Blue 5 litre stock and rate').first().waitFor({ timeout: 15000 });
+  await lib.getByText(/send the quotation on WhatsApp/).waitFor();
+  // The text streams in while writing; the footer appears once the minutes are saved.
+  await lib.getByText(/^Written .* Check before sharing\./).waitFor({ timeout: 15000 });
+  check(true, 'library opened at the meeting with its minutes');
+  check(
+    (await lib.locator('.doc').innerText()).includes('With: Krunal, Them'),
+    'minutes name the user from "My name"',
+  );
+  await lib.screenshot({ path: join(shots, '9-library-minutes.png') });
+  const minutesReq = llm.requests.find((r) =>
+    JSON.stringify(r.body.messages[0]).includes('You write the minutes'),
+  );
+  check(
+    !!minutesReq && userText(minutesReq).includes(THEM_LINES.question.text),
+    'the transcript was sent to write the minutes',
+  );
+  const stored = readdirSync(meetingsDir).filter((f) => f.endsWith('.json'));
+  check(stored.length === 1, 'one meeting file in the library folder');
+  const meetingJson = JSON.parse(readFileSync(join(meetingsDir, stored[0]), 'utf8'));
+  check(
+    meetingJson.minutes?.markdown.includes('## Action items') &&
+      meetingJson.record.mode === 'active',
+    'meeting file holds the minutes and the mode',
+  );
+  check(!JSON.stringify(meetingJson).includes('data:image'), 'no screenshot in the meeting file');
+
+  await lib.getByRole('tab', { name: 'Transcript' }).click();
+  await lib.getByText(THEM_LINES.question.text).waitFor();
+  check(true, 'library shows the transcript');
+  await lib.screenshot({ path: join(shots, '10-library-transcript.png') });
+
+  await lib.getByLabel('Search meetings').fill('quotation');
+  await lib.locator('.lib-item').first().waitFor();
+  await lib.getByLabel('Search meetings').fill('zebra crossing');
+  await lib.getByText('No meeting mentions that.').waitFor();
+  check(true, 'search finds the meeting by a word and reports no match for others');
+  const libTrusted = await lib.evaluate(() =>
+    window.bolo.updateSettings({ exportDir: '/elsewhere' }).then((s) => s.exportDir),
+  );
+  check(libTrusted === exportDir, 'library window cannot change the export folder either');
+
   check(
     gnani.connections.every((c) => c.badFrames === 0) && gnani.connections.length >= 2,
     'mock Gnani got only 1024-byte frames on 2 streams',

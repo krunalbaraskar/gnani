@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron';
 import {
   app,
+  clipboard,
   dialog,
   globalShortcut,
   ipcMain,
@@ -9,7 +10,11 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import { existsSync, readFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MeetingService } from '../core/meetings/service.ts';
+import { MeetingStore } from '../core/meetings/store.ts';
+import { OpenAiCompatibleProvider } from '../core/llm/openai-compatible.ts';
 import { GNANI_LANGUAGES } from '../core/stt/gnani-protocol.ts';
 import { consoleLogger } from '../core/util/logger.ts';
 import {
@@ -17,12 +22,15 @@ import {
   type AppState,
   type BoloEvent,
   type ContextView,
+  type ExportResult,
   type ShareProtection,
   type StartResult,
   type DemoAudio,
   type StopResult,
   type WindowCommand,
 } from '../shared/ipc.ts';
+import { markdownToPlainText } from '../shared/markdown.ts';
+import { MEETING_ID, type MeetingPatch } from '../shared/meeting.ts';
 import { CONSENT_VERSION } from '../shared/settings.ts';
 import { SPEAKERS, type Speaker } from '../shared/transcript/types.ts';
 import type { LoadedContext } from '../core/context/context.ts';
@@ -36,9 +44,11 @@ import {
   OVERLAY_WIDTH,
   setClickThrough,
 } from './overlay-window.ts';
+import { createLibraryWindow } from './library-window.ts';
+import { fileStem, writeMinutesPdf } from './minutes-export.ts';
 import { installMediaHandlers } from './permissions.ts';
 import { captureScreen } from './screen-capture.ts';
-import { llmConfig, SessionController } from './session-controller.ts';
+import { languageName, llmConfig, SessionController } from './session-controller.ts';
 import { SettingsStore } from './settings-store.ts';
 
 const HOTKEYS = {
@@ -72,6 +82,7 @@ function shareProtection(recordable: boolean): ShareProtection {
 
 const log = consoleLogger;
 let overlay: BrowserWindow | null = null;
+let library: BrowserWindow | null = null;
 let clickThrough = false;
 
 // Pin the name and settings folder (%APPDATA%\Bolo) however the app is launched;
@@ -92,8 +103,18 @@ void app.whenReady().then(() => {
   const env = loadEnv();
   const settings = new SettingsStore();
   const emit = (e: BoloEvent) => {
-    if (overlay && !overlay.isDestroyed()) overlay.webContents.send(IPC.event, e);
+    for (const w of [overlay, library]) if (w && !w.isDestroyed()) w.webContents.send(IPC.event, e);
   };
+  const meetings = new MeetingService({
+    store: new MeetingStore(join(app.getPath('userData'), 'meetings'), log),
+    llm: () => new OpenAiCompatibleProvider(llmConfig(settings.get(), loadEnv())),
+    writer: () => ({
+      myName: settings.get().myName,
+      language: languageName(settings.get().myLanguage),
+    }),
+    emit,
+    logger: log,
+  });
   // The user's reference files. Only names and sizes ever go to the renderer.
   let context: { context: LoadedContext; error?: string } = {
     context: { files: [], skipped: [], chunks: [] },
@@ -132,8 +153,13 @@ void app.whenReady().then(() => {
   });
   overlay.on('closed', () => (overlay = null));
 
-  /** Rejects IPC from anything other than our overlay's top frame. */
+  const isLibrary = (id: number) =>
+    !!library && !library.isDestroyed() && library.webContents.id === id;
+  /** Rejects IPC from anything other than the top frame of our two windows. */
   const trusted = (e: IpcMainEvent | IpcMainInvokeEvent) =>
+    (isOwn(e.sender.id) || isLibrary(e.sender.id)) && e.senderFrame === e.sender.mainFrame;
+  /** Audio, window commands and the call itself belong to the overlay alone. */
+  const fromOverlay = (e: IpcMainEvent | IpcMainInvokeEvent) =>
     isOwn(e.sender.id) && e.senderFrame === e.sender.mainFrame;
   const handle = <A extends unknown[], R>(channel: string, fn: (...args: A) => R) =>
     ipcMain.handle(channel, (e, ...args) => {
@@ -159,6 +185,7 @@ void app.whenReady().then(() => {
       platform: process.platform,
       clickThrough,
       sessionRunning: controller.running,
+      sessionPaused: controller.paused,
       demoAudioDir: demoDir,
       context: contextView(s.contextDir, context),
       // The window's protection was fixed at startup; a later .env edit must not change the claim.
@@ -188,21 +215,39 @@ void app.whenReady().then(() => {
     return controller.start();
   });
 
-  /** Stops the session and exports it. `interactive` allows asking for a folder. */
-  async function finishSession(interactive: boolean): Promise<StopResult> {
+  /**
+   * Stops the session, saves it to the library, also exports it to the export folder if
+   * one is set, and starts writing the minutes. `quitting`: the app is closing, so the
+   * minutes are left for later.
+   */
+  async function finishSession(quitting: boolean): Promise<StopResult> {
     const record = await controller.stop();
-    if (!record || !settings.get().autoExport) return {};
-    let dir = settings.get().exportDir;
-    if (!dir && interactive) dir = (await chooseDir()) ?? '';
-    if (!dir) return { error: 'Not saved: no export folder chosen.' };
+    if (!record) return {};
+    if (record.segments.length === 0)
+      return { error: 'Nothing was transcribed, so nothing was saved.' };
+    const result: StopResult = {};
     try {
-      return { exported: await writeSessionExport(dir, record) };
+      result.meetingId = (await meetings.saveRecord(record)).id;
     } catch (err) {
-      return { error: `Could not save the session: ${(err as Error).message}` };
+      result.error = `Could not save the meeting: ${(err as Error).message}`;
     }
+    const s = settings.get();
+    if (s.autoExport && s.exportDir) {
+      try {
+        result.exported = await writeSessionExport(s.exportDir, record);
+      } catch (err) {
+        result.error ??= `Could not export the meeting: ${(err as Error).message}`;
+      }
+    }
+    const llm = llmConfig(s, loadEnv());
+    if (result.meetingId && s.autoMinutes && !quitting && llm.baseUrl && llm.model) {
+      void meetings.writeMinutes(result.meetingId);
+      result.writingMinutes = true;
+    }
+    return result;
   }
 
-  handle(IPC.stopSession, () => finishSession(true));
+  handle(IPC.stopSession, () => finishSession(false));
 
   async function chooseDir(): Promise<string | null> {
     const opts = {
@@ -244,6 +289,122 @@ void app.whenReady().then(() => {
   ipcMain.on(IPC.requestMeaning, (e, id: unknown) => {
     if (trusted(e) && typeof id === 'string') controller.requestMeaning(id);
   });
+  ipcMain.on(IPC.setPaused, (e, paused: unknown) => {
+    if (fromOverlay(e) && typeof paused === 'boolean') controller.setPaused(paused);
+  });
+
+  // ---- Meeting library ----
+
+  const openLibrary = (id?: string) => {
+    if (library && !library.isDestroyed()) {
+      if (id) library.webContents.send(IPC.event, { type: 'open-meeting', id } as BoloEvent);
+      if (library.isMinimized()) library.restore();
+      library.show();
+      library.focus();
+      return;
+    }
+    library = createLibraryWindow(id);
+    library.on('closed', () => (library = null));
+  };
+  const validId = (id: unknown): id is string => typeof id === 'string' && MEETING_ID.test(id);
+  ipcMain.on(IPC.openLibrary, (e, id: unknown) => {
+    if (trusted(e)) openLibrary(validId(id) ? id : undefined);
+  });
+  handle(IPC.listMeetings, (query: unknown) =>
+    meetings.list(typeof query === 'string' ? query.slice(0, 200) : ''),
+  );
+  handle(IPC.getMeeting, (id: unknown) => (validId(id) ? meetings.detail(id) : null));
+  handle(IPC.updateMeeting, (id: unknown, patch: unknown) => {
+    if (!validId(id) || !patch || typeof patch !== 'object') return null;
+    const p = patch as Record<string, unknown>;
+    const safe: MeetingPatch = {};
+    for (const k of ['title', 'notes', 'minutes'] as const)
+      if (typeof p[k] === 'string') safe[k] = p[k];
+    return meetings.update(id, safe);
+  });
+  const parentFor = () => (library && !library.isDestroyed() ? library : overlay);
+  handle(IPC.deleteMeeting, async (id: unknown) => {
+    const m = validId(id) ? await meetings.detail(id) : null;
+    if (!m) return false;
+    const parent = parentFor();
+    const opts = {
+      type: 'warning' as const,
+      buttons: ['Delete', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      message: `Delete “${m.title}”?`,
+      detail: 'The transcript, notes and minutes are removed from this computer.',
+    };
+    const r = parent
+      ? await dialog.showMessageBox(parent, opts)
+      : await dialog.showMessageBox(opts);
+    return r.response === 0 ? meetings.delete(m.id) : false;
+  });
+  ipcMain.on(IPC.writeMinutes, (e, id: unknown) => {
+    if (!trusted(e) || !validId(id)) return;
+    const llm = llmConfig(settings.get(), loadEnv());
+    if (!llm.baseUrl || !llm.model) {
+      emit({
+        type: 'notice',
+        level: 'error',
+        message: 'Set an AI model in Settings to write minutes.',
+      });
+      return;
+    }
+    void meetings.writeMinutes(id);
+  });
+  ipcMain.on(IPC.cancelMinutes, (e, id: unknown) => {
+    if (trusted(e) && validId(id)) meetings.cancelMinutes(id);
+  });
+  handle(IPC.exportMeeting, async (id: unknown, format: unknown): Promise<ExportResult> => {
+    const m = validId(id) ? await meetings.detail(id) : null;
+    if (!m?.minutesView || (format !== 'md' && format !== 'pdf')) return null;
+    const ext = format === 'pdf' ? 'pdf' : 'md';
+    const opts = {
+      title: format === 'pdf' ? 'Save minutes as PDF' : 'Save minutes as Markdown',
+      defaultPath: join(
+        settings.get().exportDir || app.getPath('documents'),
+        `${fileStem(m.title)}.${ext}`,
+      ),
+      filters: [
+        format === 'pdf'
+          ? { name: 'PDF', extensions: ['pdf'] }
+          : { name: 'Markdown', extensions: ['md'] },
+      ],
+    };
+    const parent = parentFor();
+    const r = parent
+      ? await dialog.showSaveDialog(parent, opts)
+      : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return null;
+    try {
+      if (format === 'pdf') await writeMinutesPdf(r.filePath, m.title, m.minutesView.markdown);
+      else await writeFile(r.filePath, m.minutesView.markdown, 'utf8');
+      shell.showItemInFolder(r.filePath);
+      return { path: r.filePath };
+    } catch (err) {
+      return { error: `Could not save: ${(err as Error).message}` };
+    }
+  });
+  const copyMinutes = async (id: unknown) => {
+    const m = validId(id) ? await meetings.detail(id) : null;
+    if (!m?.minutesView) return null;
+    clipboard.writeText(markdownToPlainText(m.minutesView.markdown));
+    return m;
+  };
+  handle(IPC.copyMinutes, async (id: unknown) => !!(await copyMinutes(id)));
+  ipcMain.on(IPC.emailMinutes, (e, id: unknown) => {
+    if (!trusted(e)) return;
+    void copyMinutes(id).then((m) => {
+      if (!m?.minutesView) return;
+      // Mail apps cut long mailto bodies, so long minutes are pasted from the clipboard.
+      const text = markdownToPlainText(m.minutesView.markdown);
+      const body = text.length <= 1500 ? text : 'Minutes copied to the clipboard: paste them here.';
+      void shell.openExternal(
+        `mailto:?subject=${encodeURIComponent(`Minutes: ${m.title}`)}&body=${encodeURIComponent(body)}`,
+      );
+    });
+  });
 
   ipcMain.on(IPC.openExportDir, (e) => {
     const dir = settings.get().exportDir;
@@ -272,7 +433,7 @@ void app.whenReady().then(() => {
   };
 
   ipcMain.on(IPC.window, (e, cmd: WindowCommand) => {
-    if (!trusted(e) || !overlay) return;
+    if (!fromOverlay(e) || !overlay) return;
     switch (cmd?.kind) {
       case 'hide':
         overlay.hide();
@@ -303,7 +464,7 @@ void app.whenReady().then(() => {
   ipcMain.on(IPC.audioPort, (e, msg: { speaker?: Speaker }) => {
     const port = e.ports[0];
     if (!port) return;
-    if (!trusted(e) || !msg || !SPEAKERS.includes(msg.speaker as Speaker)) {
+    if (!fromOverlay(e) || !msg || !SPEAKERS.includes(msg.speaker as Speaker)) {
       port.close();
       return;
     }
@@ -336,7 +497,7 @@ void app.whenReady().then(() => {
     if (quitting || !controller.running) return;
     e.preventDefault();
     quitting = true;
-    void finishSession(false).finally(() => app.quit());
+    void finishSession(true).finally(() => app.quit());
   });
 });
 

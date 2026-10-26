@@ -1,13 +1,17 @@
-# Bolo — the call copilot that knows your stuff
+# Bolo — the meeting buddy that knows your work
 
 A client asks "how much stock do you have of the blue 5 litre, and what's the bulk rate?"
 A couple of seconds later the exact figure from **your own files** is on your screen, with
-the file it came from, in a glass bar that **does not appear in your screen share**.
+the file it came from, in a glass bar that **does not appear in your screen share**. When
+the meeting ends, the **minutes** are already written: summary, decisions, action items.
 
 Bolo is a small Windows desktop app that sits on top of your Zoom, Meet or Teams call. It
 transcribes **both sides** of the conversation live with **Gnani's speech-to-text**, which
-handles Hindi, Tamil and other Indian languages and code-mixed speech like Hinglish. Then
-it does four things:
+handles Hindi, Tamil and other Indian languages and code-mixed speech like Hinglish.
+
+**During the meeting**, in the mode you pick (**Silent**: transcribe only · **Assist**:
+answers when you ask · **Active**: also answers their questions on its own), with a
+**pause** button for anything off the record:
 
 - **Answers from your files.** Point it at a folder with your stock sheet, price list or
   project notes. When they ask a question, Bolo answers from those files and names the
@@ -19,8 +23,17 @@ it does four things:
 - **Reads your screen when you ask.** One hotkey sends a picture of your screen with your
   question. Never in the background.
 
-Built for sales reps, small business owners, brokers and agents who take calls in Indian
-languages. Built for Gnani AI's Great Indian AI Internship Challenge.
+**After the meeting**, everything stays on your computer:
+
+- **Minutes of the meeting (MOM).** Summary, key points, decisions, action items with
+  owners, open questions and next steps, written from the transcript and your notes. Any
+  figure nobody said in the meeting is flagged for you to check.
+- **A meeting library.** Every meeting with its transcript, Bolo's answers, your notes and
+  the minutes, searchable across all meetings. Edit the minutes, then copy them for email
+  or chat, open them in your mail app, or save them as PDF or Markdown.
+
+Built for sales reps, small business owners, brokers, agents and anyone who takes meetings
+in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 
 <p align="center"><img src="docs/overlay.png" width="620" alt="Bolo overlay during a call: the client's Hinglish question, its meaning in English, and an answer taken from inventory.csv and price-list.md"></p>
 
@@ -54,7 +67,9 @@ Checked on Windows 11 (build 26100) on 2026-10-09.
 | Context files: loading, chunking, selection                       | Done, unit-tested                                                                                                                              |
 | Answers: source parsing, number check, labels, trigger precedence | Done, unit-tested                                                                                                                              |
 | Meaning line for mixed-language speech                            | Done, unit-tested                                                                                                                              |
-| The whole app end to end (Electron, real windows)                 | **Passes on Windows** against the mock Gnani and mock AI servers: 28 checks, `npm run test:e2e`                                                |
+| Modes (Silent / Assist / Active) and pause                        | Done, unit-tested                                                                                                                              |
+| Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested; minutes not yet written by a real model, only the mock (2026-10-26)                                                         |
+| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-26) against the mock Gnani and mock AI servers: 40 checks, `npm run test:e2e`                                   |
 | Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                 |
 | Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share              |
 | Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                             |
@@ -204,9 +219,27 @@ key, the transcript and your files travel in that request.
 | `Ctrl+Shift+H`     | Show / hide the overlay (doesn't steal focus)   |
 | `Ctrl+Shift+M`     | Click-through: mouse goes to the app underneath |
 
-**The bar.** Start/Stop with a call timer; one dot per side (green = connected, hover for
-latency); the Ask box; a screen toggle; a shield; expand/collapse; a menu. The window is
-exactly as tall as what is open, and the bar is the drag handle.
+**The bar.** Start/Stop with a call timer; pause; one dot per side (green = connected, hover
+for latency); the mode chip; the Ask box; a screen toggle; a shield; expand/collapse; a
+menu. The window is exactly as tall as what is open, and the bar is the drag handle.
+
+**Modes.** Click the chip on the bar to switch, even mid-meeting:
+
+| Mode   | During the meeting                                                 |
+| ------ | ------------------------------------------------------------------ |
+| Silent | Transcribes only. No AI request unless you ask (hotkey or Ask box) |
+| Assist | Answers when you ask; plain meaning under mixed-language lines     |
+| Active | Also answers their questions on its own (the default)              |
+
+**Pause** (⏸ next to the timer) stops sending audio to speech-to-text until you resume.
+Nothing said meanwhile is heard or saved; the transcript marks the gap.
+
+**After the meeting.** Stop saves the meeting to the library on this computer
+(`%APPDATA%\Bolo\meetings`) and, with an AI model set, writes the minutes in the
+background. Click the "Meeting saved" notice, or **⋯ → Meetings**, to open the library.
+Set **Context → My name** so the minutes say who you are. Add notes in **Notes & answers**
+and press **Rewrite** to include them. Turn automatic minutes off under **Settings → After
+the meeting**; the old export to a folder (.md + .json transcript) is there too.
 
 **The shield** is green and reads "Hidden from screen share" only on a Windows build
 where that was checked. Anywhere else it is amber: "May be visible when sharing".
@@ -485,17 +518,22 @@ src/
     suggest/         question detector, echo dedupe
     settings.ts      settings schema + validation
     ipc.ts           IPC channel names and event types
+    meeting.ts       meeting library types
+    markdown.ts      escaping Markdown renderer for the minutes
   core/              Node-only logic, no Electron imports (testable)
     stt/             SttProvider, Gnani protocol adapter + provider, backoff
     llm/             LlmProvider, OpenAI-compatible provider, SSE parser, think filter
     context/         reference files: decode, chunk, select
     suggest/         prompt builder, answer checks, SuggestionEngine
     gloss/           meaning line for mixed-language speech
-    session/         CopilotSession, export
-  main/              Electron main: window, hotkeys, IPC, permissions, settings store,
-                     context folder loader, screen capture
+    session/         CopilotSession (modes, pause), export
+    minutes/         minutes of the meeting: prompts, long-meeting map/reduce, figure check, PDF page
+    meetings/        meeting library: file store, search, MeetingService
+  main/              Electron main: overlay + library windows, hotkeys, IPC, permissions,
+                     settings store, context folder loader, screen capture, PDF export
   preload/           contextBridge API
-  renderer/          React overlay (bar, tabs, answer card), AudioWorklet, live capture, file replay
+  renderer/          React overlay (bar, tabs, answer card), meeting library (#library),
+                     AudioWorklet, live capture, file replay
 test/                Vitest tests, mock servers, synthetic fixtures
 scripts/             fixtures, mock servers, demo audio, end-to-end checks
 demo-context/        synthetic stock sheet, price list and call notes for the demo

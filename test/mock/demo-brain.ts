@@ -24,6 +24,29 @@ export function demoReply(body: Body): string {
     (m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'),
   );
 
+  // Minutes of the meeting (see src/core/minutes/minutes.ts).
+  if (system.includes('You take notes on part')) {
+    return '- Topics: stock and wholesale rate of blue 5 litre\n- Action items: send quotation on WhatsApp';
+  }
+  if (system.includes('You write the minutes of a meeting')) {
+    return [
+      '# Blue 5 litre stock and rate',
+      '## Summary',
+      'Mehta Hardware asked about stock and the wholesale rate for the blue 5 litre paint. They asked for a quotation on WhatsApp.',
+      '## Key points',
+      '- Mehta Hardware wants to place an order for blue 5 litre.',
+      '- They asked how much stock there is and the wholesale rate.',
+      '## Decisions',
+      '- None recorded.',
+      '## Action items',
+      '- [ ] **Me** — send the quotation on WhatsApp',
+      '## Open questions',
+      '- Order quantity was not confirmed.',
+      '## Next steps',
+      '- Follow up after the quotation is sent.',
+    ].join('\n');
+  }
+
   // Meaning of one line (see src/core/gloss/engine.ts).
   if (system.includes('follow a live call')) {
     return MEANINGS.find(([re]) => re.test(user))?.[1] ?? '-';

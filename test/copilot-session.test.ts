@@ -50,7 +50,7 @@ describe('CopilotSession with fixtures and mock servers', () => {
     const settings: Settings = {
       ...DEFAULT_SETTINGS,
       contextNote: 'Selling term insurance',
-      autoSuggest: true,
+      mode: 'active',
       explainThem: false, // meanings share the mock LLM; this test is about the suggestion
     };
     const { log, events } = recordEvents();
@@ -115,7 +115,7 @@ describe('CopilotSession with fixtures and mock servers', () => {
     const llmUrl = await llm.start();
     const { fake, emit } = fakeStt();
     const { log, events } = recordEvents();
-    const settings: Settings = { ...DEFAULT_SETTINGS, autoSuggest: false };
+    const settings: Settings = { ...DEFAULT_SETTINGS, mode: 'assist' };
     const session = new CopilotSession({
       stt: fake,
       llm: () => new OpenAiCompatibleProvider({ baseUrl: llmUrl, model: 'm' }),
@@ -140,7 +140,7 @@ describe('CopilotSession with fixtures and mock servers', () => {
       llm: () => {
         throw new Error('unused');
       },
-      settings: () => ({ ...DEFAULT_SETTINGS, autoSuggest: false }),
+      settings: () => ({ ...DEFAULT_SETTINGS, mode: 'assist' }),
       events,
     });
     session.start();
@@ -175,7 +175,7 @@ describe('CopilotSession with fixtures and mock servers', () => {
     const settings: Settings = {
       ...DEFAULT_SETTINGS,
       echoDedupe: false,
-      autoSuggest: false,
+      mode: 'assist',
       silenceGate: true,
     };
     const session = new CopilotSession({
@@ -219,3 +219,97 @@ function fakeStt() {
     });
   return { fake, emit, sent };
 }
+
+describe('CopilotSession modes and pause', () => {
+  const countingLlm = () => {
+    const calls: string[] = [];
+    return {
+      calls,
+      provider: {
+        name: 'counting',
+        async *streamChat(req: { messages: { role: string; content: unknown }[] }) {
+          calls.push(String(req.messages[0]!.content));
+          yield 'Ji.';
+        },
+      },
+    };
+  };
+
+  it('makes no AI request in silent mode until the user asks', async () => {
+    const { fake, emit } = fakeStt();
+    const llm = countingLlm();
+    const session = new CopilotSession({
+      stt: fake,
+      llm: () => llm.provider,
+      settings: () => ({ ...DEFAULT_SETTINGS, mode: 'silent', explainThem: true }),
+      events: recordEvents().events,
+    });
+    session.start();
+    emit('them', 'Kya aap kal tak quotation bhej sakte ho?');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(llm.calls).toHaveLength(0);
+    expect((await session.ask('what did they ask?'))?.text).toBe('Ji.');
+    expect(llm.calls).toHaveLength(1);
+    await session.stop();
+  });
+
+  it('assist explains lines but does not answer on its own; active does both', async () => {
+    for (const [mode, answers] of [
+      ['assist', 0],
+      ['active', 1],
+    ] as const) {
+      const { fake, emit } = fakeStt();
+      const llm = countingLlm();
+      const { log, events } = recordEvents();
+      const session = new CopilotSession({
+        stt: fake,
+        llm: () => llm.provider,
+        settings: () => ({ ...DEFAULT_SETTINGS, mode, explainThem: true }),
+        events,
+      });
+      session.start();
+      emit('them', 'Kya aap kal tak quotation bhej sakte ho?');
+      await waitFor(() => llm.calls.length >= 1 + answers, 1000, `${mode} requests`);
+      await new Promise((r) => setTimeout(r, 30));
+      // An answer pre-empts a meaning in flight, which is then asked again.
+      expect(
+        llm.calls.filter((c) => c.includes('follow a live call')).length,
+      ).toBeGreaterThanOrEqual(1);
+      expect(log.filter((e) => e.type === 'suggestion-start')).toHaveLength(answers);
+      const record = await session.stop();
+      expect(record.mode).toBe(mode);
+    }
+  });
+
+  it('drops audio while paused and records the pause', async () => {
+    const { fake, sent } = fakeStt();
+    let t = 1_000;
+    const session = new CopilotSession({
+      stt: fake,
+      llm: () => {
+        throw new Error('unused');
+      },
+      settings: () => ({ ...DEFAULT_SETTINGS, mode: 'silent' }),
+      events: recordEvents().events,
+      now: () => t,
+    });
+    session.start();
+    session.pushFrame('them', new Uint8Array(1024));
+    session.setPaused(true);
+    expect(session.isPaused).toBe(true);
+    t = 5_000;
+    session.pushFrame('them', new Uint8Array(1024));
+    session.pushFrame('me', new Uint8Array(1024));
+    session.setPaused(false);
+    session.pushFrame('them', new Uint8Array(1024));
+    expect(sent).toEqual({ me: 0, them: 2 });
+    session.setPaused(true); // still paused when stopped: the pause is closed at the end
+    t = 7_000;
+    const record = await session.stop();
+    expect(record.pauses).toEqual([
+      { from: 1_000, to: 5_000 },
+      { from: 5_000, to: 7_000 },
+    ]);
+    expect(session.isPaused).toBe(false);
+  });
+});

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ShareProtection } from '../../../shared/ipc.ts';
+import { MEETING_MODES, type MeetingMode } from '../../../shared/settings.ts';
 import { formatClock } from '../../../shared/transcript/format.ts';
 import type { Speaker } from '../../../shared/transcript/types.ts';
 import type { UiState } from '../state.ts';
@@ -9,6 +10,21 @@ const SHIELD: Record<ShareProtection, string> = {
   hidden: 'Hidden from screen share',
   unverified: 'May be visible when sharing',
   demo: 'Visible in recordings (demo mode)',
+};
+
+export const MODE_INFO: Record<MeetingMode, { label: string; hint: string }> = {
+  silent: {
+    label: 'Silent',
+    hint: 'Silent: transcribes only. No AI during the meeting unless you ask.',
+  },
+  assist: {
+    label: 'Assist',
+    hint: 'Assist: answers when you ask, meanings under mixed-language lines.',
+  },
+  active: {
+    label: 'Active',
+    hint: 'Active: also answers their questions on its own.',
+  },
 };
 
 function Dot({ speaker, state }: { speaker: Speaker; state: UiState }) {
@@ -37,6 +53,8 @@ interface Props {
   startedAt: number | null;
   share: ShareProtection;
   visionReady: boolean;
+  mode: MeetingMode;
+  onMode: (mode: MeetingMode) => void;
   onStart: () => void;
   onStop: () => void;
   onToggleOpen: () => void;
@@ -48,6 +66,8 @@ export function Bar({
   startedAt,
   share,
   visionReady,
+  mode,
+  onMode,
   onStart,
   onStop,
   onToggleOpen,
@@ -88,11 +108,42 @@ export function Bar({
       )}
 
       {state.running && (
-        <span className="dots" role="status" aria-label="Listening">
-          <Dot speaker="them" state={state} />
-          <Dot speaker="me" state={state} />
-        </span>
+        <button
+          className={`icon ${state.paused ? 'on' : ''}`}
+          onClick={() => window.bolo.setPaused(!state.paused)}
+          aria-pressed={state.paused}
+          title={
+            state.paused
+              ? 'Paused: nothing is heard or transcribed. Click to resume.'
+              : 'Pause (off the record)'
+          }
+        >
+          <Icon name={state.paused ? 'play' : 'pause'} size={state.paused ? 12 : 16} />
+        </button>
       )}
+
+      {state.running &&
+        (state.paused ? (
+          <span className="paused-label" role="status" aria-label="Paused">
+            Paused
+          </span>
+        ) : (
+          <span className="dots" role="status" aria-label="Listening">
+            <Dot speaker="them" state={state} />
+            <Dot speaker="me" state={state} />
+          </span>
+        ))}
+
+      <button
+        className={`mode mode-${mode}`}
+        onClick={() =>
+          onMode(MEETING_MODES[(MEETING_MODES.indexOf(mode) + 1) % MEETING_MODES.length]!)
+        }
+        title={`${MODE_INFO[mode].hint}\nClick to switch.`}
+        aria-label={`Mode: ${MODE_INFO[mode].label}`}
+      >
+        {MODE_INFO[mode].label}
+      </button>
 
       <form
         className={`ask ${withScreen ? 'with-screen' : ''}`}

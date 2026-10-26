@@ -6,13 +6,25 @@ interface Props {
   context: ContextView;
   note: string;
   onNote: (note: string) => void;
+  myName: string;
+  onMyName: (name: string) => void;
 }
 
-/** What Bolo knows: the folder of reference files, and the note about this call. */
-export function ContextTab({ context, note, onNote }: Props) {
+/** What Bolo knows: who you are, the folder of reference files, and the note about this call. */
+export function ContextTab({ context, note, onNote, myName, onMyName }: Props) {
   const draft = useDraft(note, onNote);
+  const name = useDraft(myName, onMyName);
   return (
     <div className="context">
+      <label className="inline">
+        My name
+        <input
+          type="text"
+          maxLength={80}
+          placeholder="Used in the minutes and action items"
+          {...name}
+        />
+      </label>
       <div className="row">
         <span className="path" title={context.dir}>
           {context.dir || 'No context folder yet'}

@@ -18,6 +18,7 @@ const app: AppState = {
   platform: 'win32',
   clickThrough: false,
   sessionRunning: false,
+  sessionPaused: false,
   demoAudioDir: '/tmp/demo',
   context: { dir: '', files: [], skipped: [] },
   shareProtection: 'unverified',

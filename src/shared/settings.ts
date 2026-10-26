@@ -2,8 +2,21 @@
 
 export type OutputLanguage = 'english' | 'same' | 'hinglish';
 export type AudioMode = 'live' | 'file';
+/**
+ * How much Bolo does during a meeting. silent = transcribe only (answers only when asked) ·
+ * assist = answers when asked, meanings under mixed-language lines · active = also answers
+ * their questions on its own.
+ */
+export type MeetingMode = 'silent' | 'assist' | 'active';
+export const MEETING_MODES: readonly MeetingMode[] = ['silent', 'assist', 'active'];
 
 export interface Settings {
+  /** See MeetingMode. Read on every line, so switching mid-meeting applies at once. */
+  mode: MeetingMode;
+  /** The user's name: "Me" in the minutes, and who action items are assigned to. */
+  myName: string;
+  /** Write the minutes as soon as a meeting ends. */
+  autoMinutes: boolean;
   /** Gnani language code (see GNANI_LANGUAGES). */
   sttLanguage: string;
   /** Numbers, currency and dates as digits (Gnani ITN; Hindi and English only). */
@@ -16,8 +29,6 @@ export interface Settings {
   llmModel: string;
   /** Minutes of transcript sent to the LLM. */
   transcriptMinutes: number;
-  /** Suggest automatically when "them" finishes a question. */
-  autoSuggest: boolean;
   /** Skip sending long silences to the STT to save credits. */
   silenceGate: boolean;
   silenceThresholdDb: number;
@@ -30,7 +41,7 @@ export interface Settings {
   replaySpeed: number;
   /** Also play replayed audio through the speakers. */
   replayAudible: boolean;
-  /** '' = ask on first export. */
+  /** Also write each meeting as .md/.json files here. '' = only the meeting library. */
   exportDir: string;
   autoExport: boolean;
   consentAcknowledged: boolean;
@@ -49,10 +60,13 @@ export interface Settings {
   llmVisionModel: string;
 }
 
-/** Bumped when the consent notice starts disclosing something new (2: files and screen). */
-export const CONSENT_VERSION = 2;
+/** Bumped when the consent notice starts disclosing something new (2: files and screen; 3: meeting library and minutes). */
+export const CONSENT_VERSION = 3;
 
 export const DEFAULT_SETTINGS: Settings = {
+  mode: 'active',
+  myName: '',
+  autoMinutes: true,
   sttLanguage: 'hi-IN',
   formatNumbers: false,
   outputLanguage: 'same',
@@ -60,7 +74,6 @@ export const DEFAULT_SETTINGS: Settings = {
   llmBaseUrl: '',
   llmModel: '',
   transcriptMinutes: 3,
-  autoSuggest: true,
   silenceGate: false,
   silenceThresholdDb: -50,
   echoDedupe: true,
@@ -115,6 +128,14 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const d = base;
   return {
+    mode: pick(
+      i['mode'],
+      // Before modes, auto-suggest off was the closest thing to "assist".
+      i['autoSuggest'] === false && base === DEFAULT_SETTINGS ? 'assist' : d.mode,
+      (v) => MEETING_MODES.includes(v as MeetingMode),
+    ),
+    myName: pick(i['myName'], d.myName, (v) => isString(v) && (v as string).length <= 80),
+    autoMinutes: pick(i['autoMinutes'], d.autoMinutes, isBool),
     sttLanguage: pick(
       i['sttLanguage'],
       d.sttLanguage,
@@ -137,7 +158,6 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
     ),
     llmModel: pick(i['llmModel'], d.llmModel, (v) => isString(v) && (v as string).length <= 200),
     transcriptMinutes: pick(i['transcriptMinutes'], d.transcriptMinutes, inRange(0.5, 30)),
-    autoSuggest: pick(i['autoSuggest'], d.autoSuggest, isBool),
     silenceGate: pick(i['silenceGate'], d.silenceGate, isBool),
     silenceThresholdDb: pick(i['silenceThresholdDb'], d.silenceThresholdDb, inRange(-90, -10)),
     echoDedupe: pick(i['echoDedupe'], d.echoDedupe, isBool),

@@ -11,7 +11,7 @@ describe('sanitizeSettings', () => {
     const s = sanitizeSettings({
       outputLanguage: 'hinglish',
       transcriptMinutes: 5,
-      autoSuggest: false,
+      mode: 'silent',
       overlayOpacity: 7, // out of range
       llmBaseUrl: 'file:///etc/passwd', // not http(s)
       sttLanguage: 'ta-IN',
@@ -19,7 +19,7 @@ describe('sanitizeSettings', () => {
     });
     expect(s.outputLanguage).toBe('hinglish');
     expect(s.transcriptMinutes).toBe(5);
-    expect(s.autoSuggest).toBe(false);
+    expect(s.mode).toBe('silent');
     expect(s.overlayOpacity).toBe(DEFAULT_SETTINGS.overlayOpacity);
     expect(s.llmBaseUrl).toBe('');
     expect(s.sttLanguage).toBe('ta-IN');
@@ -34,6 +34,6 @@ describe('sanitizeSettings', () => {
 
   it('merges over a base so partial updates keep other fields', () => {
     const base = { ...DEFAULT_SETTINGS, contextNote: 'keep me' };
-    expect(sanitizeSettings({ autoSuggest: false }, base).contextNote).toBe('keep me');
+    expect(sanitizeSettings({ mode: 'assist' }, base).contextNote).toBe('keep me');
   });
 });

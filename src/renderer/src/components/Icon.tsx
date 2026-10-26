@@ -9,6 +9,15 @@ const PATHS = {
   send: 'M5 12h13M13 6l6 6-6 6',
   folder: 'M3 7h7l2 2h9v10H3z',
   close: 'M6 6l12 12M18 6L6 18',
+  pause: 'M9 6v12M15 6v12',
+  book: 'M4 5h5a3 3 0 013 3v11a2 2 0 00-2-2H4zM20 5h-5a3 3 0 00-3 3v11a2 2 0 012-2h6z',
+  search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM16 16l4 4',
+  copy: 'M9 9h10v11H9zM5 15V4h10',
+  mail: 'M4 6h16v12H4zM4 7l8 6 8-6',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  trash: 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  sparkle: 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6',
 } as const;
 
 const FILLED = new Set(['play', 'stop']);

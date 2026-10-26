@@ -13,4 +13,8 @@ export interface SessionRecord {
   suggestions: Suggestion[];
   /** "me" segments dropped as speaker echo. */
   echoesRemoved: number;
+  /** Mode at the end of the meeting (see MeetingMode). Absent in records made before modes. */
+  mode?: string;
+  /** Stretches when the user paused listening; nothing was sent or transcribed then. */
+  pauses?: { from: number; to: number }[];
 }

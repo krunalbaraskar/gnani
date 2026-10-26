@@ -9,6 +9,7 @@ import { AnswerCard } from './components/AnswerCard.tsx';
 import { Bar } from './components/Bar.tsx';
 import { ConsentNotice } from './components/ConsentNotice.tsx';
 import { ContextTab } from './components/ContextTab.tsx';
+import { Icon } from './components/Icon.tsx';
 import { SettingsPanel, type ReplaySelection } from './components/SettingsPanel.tsx';
 import { Line, Transcript } from './components/Transcript.tsx';
 import { initialUiState, uiReducer, type Tab } from './state.ts';
@@ -57,7 +58,7 @@ export function App() {
     if (!state.notice) return;
     const t = setTimeout(
       () => dispatch({ type: 'dismiss-notice' }),
-      state.notice.level === 'error' ? 9000 : 5000,
+      state.notice.meetingId ? 15000 : state.notice.level === 'error' ? 9000 : 5000,
     );
     return () => clearTimeout(t);
   }, [state.notice]);
@@ -78,8 +79,16 @@ export function App() {
   const stop = useCallback(async () => {
     teardownAudio();
     const res = await window.bolo.stopSession();
-    if (res.exported)
-      dispatch({ type: 'notice', level: 'info', message: `Saved ${res.exported.markdown}` });
+    if (res.meetingId)
+      dispatch({
+        type: 'notice',
+        level: res.error ? 'error' : 'info',
+        message:
+          (res.writingMinutes ? 'Meeting saved. Writing the minutes…' : 'Meeting saved.') +
+          (res.error ? ` ${res.error}` : '') +
+          ' Click to open.',
+        meetingId: res.meetingId,
+      });
     else if (res.error) dispatch({ type: 'notice', level: 'error', message: res.error });
   }, [teardownAudio]);
 
@@ -186,6 +195,8 @@ export function App() {
         startedAt={startedAt}
         share={app.shareProtection}
         visionReady={!!s.llmVisionModel}
+        mode={s.mode}
+        onMode={(mode) => void updateSettings({ mode })}
         onStart={() => void start()}
         onStop={() => void stop()}
         onToggleOpen={() => dispatch({ type: 'toggle-open' })}
@@ -194,6 +205,9 @@ export function App() {
 
       {menu && (
         <div className="strip menu">
+          <button className="ghost small" onClick={() => window.bolo.openLibrary()}>
+            <Icon name="book" size={13} /> Meetings
+          </button>
           <button
             className="ghost small"
             onClick={() => window.bolo.window({ kind: 'toggle-click-through' })}
@@ -217,7 +231,10 @@ export function App() {
         <div
           className={`strip notice-${state.notice.level}`}
           role={state.notice.level === 'error' ? 'alert' : 'status'}
-          onClick={() => dispatch({ type: 'dismiss-notice' })}
+          onClick={() => {
+            if (state.notice?.meetingId) window.bolo.openLibrary(state.notice.meetingId);
+            dispatch({ type: 'dismiss-notice' });
+          }}
         >
           {state.notice.message}
         </div>
@@ -313,6 +330,8 @@ export function App() {
                 context={app.context}
                 note={s.contextNote}
                 onNote={(contextNote) => void updateSettings({ contextNote })}
+                myName={s.myName}
+                onMyName={(myName) => void updateSettings({ myName })}
               />
             )}
 

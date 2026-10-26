@@ -16,6 +16,17 @@ const api: BoloApi = {
   ask: (text, withScreen) => ipcRenderer.send(IPC.ask, text, withScreen),
   askScreen: () => ipcRenderer.send(IPC.askScreen),
   requestMeaning: (id) => ipcRenderer.send(IPC.requestMeaning, id),
+  setPaused: (paused) => ipcRenderer.send(IPC.setPaused, paused),
+  openLibrary: (id) => ipcRenderer.send(IPC.openLibrary, id),
+  listMeetings: (query) => ipcRenderer.invoke(IPC.listMeetings, query),
+  getMeeting: (id) => ipcRenderer.invoke(IPC.getMeeting, id),
+  updateMeeting: (id, patch) => ipcRenderer.invoke(IPC.updateMeeting, id, patch),
+  deleteMeeting: (id) => ipcRenderer.invoke(IPC.deleteMeeting, id),
+  writeMinutes: (id) => ipcRenderer.send(IPC.writeMinutes, id),
+  cancelMinutes: (id) => ipcRenderer.send(IPC.cancelMinutes, id),
+  exportMeeting: (id, format) => ipcRenderer.invoke(IPC.exportMeeting, id, format),
+  copyMinutes: (id) => ipcRenderer.invoke(IPC.copyMinutes, id),
+  emailMinutes: (id) => ipcRenderer.send(IPC.emailMinutes, id),
   window: (cmd) => ipcRenderer.send(IPC.window, cmd),
   openAudioPort: (speaker) => {
     // MessagePorts can't cross contextBridge, so: one end to main over IPC, the
