@@ -1,15 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppState } from '../../../shared/ipc.ts';
 import type { OutputLanguage, Settings } from '../../../shared/settings.ts';
+import type { ReplayFiles } from '../audio/file-replay.ts';
+
+export type ReplaySelection = ReplayFiles & { meName?: string; themName?: string };
 
 interface Props {
   app: AppState;
+  running: boolean;
+  files: ReplaySelection;
+  onFiles: (f: ReplaySelection) => void;
+  onLoadDemo: () => void;
   onChange: (patch: Partial<Settings>) => void;
   onChooseExportDir: () => void;
 }
 
 /** Text field that saves on blur/Enter, not on every keystroke. */
-function useDraft(value: string, commit: (v: string) => void) {
+export function useDraft(value: string, commit: (v: string) => void) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return {
@@ -19,11 +26,27 @@ function useDraft(value: string, commit: (v: string) => void) {
   };
 }
 
-export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
+export function SettingsPanel({
+  app,
+  running,
+  files,
+  onFiles,
+  onLoadDemo,
+  onChange,
+  onChooseExportDir,
+}: Props) {
   const s = app.settings;
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const meInput = useRef<HTMLInputElement>(null);
+  const themInput = useRef<HTMLInputElement>(null);
   const lang = app.languages.find((l) => l.code === s.sttLanguage);
-  const context = useDraft(s.contextNote, (v) => onChange({ contextNote: v }));
+  const vision = useDraft(s.llmVisionModel, (v) => onChange({ llmVisionModel: v.trim() }));
+  const pick = async (speaker: 'me' | 'them', list: FileList | null) => {
+    const file = list?.[0];
+    if (!file) return;
+    const buf = await file.arrayBuffer();
+    onFiles({ ...files, [speaker]: buf, [`${speaker}Name`]: file.name });
+  };
   const baseUrl = useDraft(s.llmBaseUrl, (v) => onChange({ llmBaseUrl: v.trim() }));
   const model = useDraft(s.llmModel, (v) => onChange({ llmModel: v.trim() }));
 
@@ -42,10 +65,12 @@ export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
     <div className="settings">
       <fieldset>
         <legend>Keys (from .env — never shown here)</legend>
-        <p className={app.keys.gnani ? 'ok' : 'error-text'}>
-          GNANI_API_KEY: {app.keys.gnani ? 'found' : 'missing — add it to .env and restart'}
+        <p className={app.keys.stt ? 'ok' : 'error-text'}>
+          {app.stt.keyVar}: {app.keys.stt ? 'found' : 'missing — add it to .env and restart'}
         </p>
-        <p className="muted small">STT endpoint: {app.sttUrl}</p>
+        <p className="muted small">
+          Speech-to-text: {app.stt.name} at {app.stt.url}
+        </p>
         <p className={app.keys.llm ? 'ok' : 'muted'}>
           LLM_API_KEY: {app.keys.llm ? 'found' : 'not set (fine for a local Ollama/vLLM server)'}
         </p>
@@ -94,29 +119,71 @@ export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
             </span>
           </label>
         ) : (
-          <div className="row">
-            <label>
-              Speed
-              <select
-                value={s.replaySpeed}
-                onChange={(e) => onChange({ replaySpeed: Number(e.target.value) })}
+          <>
+            <div className="file-row">
+              <button
+                className="ghost small"
+                disabled={running}
+                onClick={() => themInput.current?.click()}
+                title="WAV with the other side"
               >
-                {[1, 1.5, 2, 4].map((v) => (
-                  <option key={v} value={v}>
-                    {v}×
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="check">
+                Them: {files.themName ?? 'choose WAV'}
+              </button>
+              <button
+                className="ghost small"
+                disabled={running}
+                onClick={() => meInput.current?.click()}
+                title="WAV with your side"
+              >
+                Me: {files.meName ?? 'choose WAV'}
+              </button>
+              <button
+                className="ghost small"
+                disabled={running}
+                onClick={onLoadDemo}
+                title="Load demo-audio/me.wav and them.wav"
+              >
+                Demo
+              </button>
               <input
-                type="checkbox"
-                checked={s.replayAudible}
-                onChange={(e) => onChange({ replayAudible: e.target.checked })}
+                ref={themInput}
+                type="file"
+                accept=".wav,audio/wav"
+                hidden
+                onChange={(e) => void pick('them', e.target.files)}
               />
-              Play aloud
-            </label>
-          </div>
+              <input
+                ref={meInput}
+                type="file"
+                accept=".wav,audio/wav"
+                hidden
+                onChange={(e) => void pick('me', e.target.files)}
+              />
+            </div>
+            <div className="row">
+              <label>
+                Speed
+                <select
+                  value={s.replaySpeed}
+                  onChange={(e) => onChange({ replaySpeed: Number(e.target.value) })}
+                >
+                  {[1, 1.5, 2, 4].map((v) => (
+                    <option key={v} value={v}>
+                      {v}×
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={s.replayAudible}
+                  onChange={(e) => onChange({ replayAudible: e.target.checked })}
+                />
+                Play aloud
+              </label>
+            </div>
+          </>
         )}
         <label className="check">
           <input
@@ -162,7 +229,7 @@ export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
         </label>
         {lang?.experimental && (
           <p className="warn small">
-            Experimental: not in Gnani’s current SDK. If it fails, switch back to Hindi.
+            Experimental: accuracy not tested yet. If lines look wrong, pick the call’s language.
           </p>
         )}
         {lang?.supportsItn && (
@@ -176,18 +243,30 @@ export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
           </label>
         )}
         <p className="muted small">Applies from the next session.</p>
+        <label>
+          I read
+          <select value={s.myLanguage} onChange={(e) => onChange({ myLanguage: e.target.value })}>
+            {app.languages
+              .filter((l) => !l.experimental)
+              .map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.explainThem}
+            onChange={(e) => onChange({ explainThem: e.target.checked })}
+          />
+          Show a plain meaning under their lines that mix in other languages
+        </label>
       </fieldset>
 
       <fieldset>
         <legend>Suggestions</legend>
-        <label>
-          Context for the AI
-          <textarea
-            rows={3}
-            placeholder="e.g. I'm selling term insurance; be concise and polite."
-            {...context}
-          />
-        </label>
         <label>Reply language</label>
         <div className="radio-row">
           {(
@@ -242,8 +321,29 @@ export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
           <input type="text" placeholder={app.llm.model || 'gpt-4o-mini'} {...model} />
         </label>
         <p className="muted small">
-          Leave empty to use LLM_BASE_URL / LLM_MODEL from .env. Ollama: http://localhost:11434/v1
+          Leave empty to use LLM_BASE_URL / LLM_MODEL from .env. Ollama: http://localhost:11434/v1.
+          Use https, except for this computer or your local network.
         </p>
+        <label>
+          Vision model (for reading the screen)
+          <input type="text" placeholder="e.g. gpt-4o-mini — empty turns it off" {...vision} />
+        </label>
+        <p className="muted small">
+          Name a model that accepts images. When you ask with the screen, one picture of it is sent
+          to this model; never otherwise.
+        </p>
+        <label>
+          File content sent per answer: {Math.round(s.contextBudgetChars / 1000)}k characters
+          <input
+            type="range"
+            min={4000}
+            max={100000}
+            step={2000}
+            value={s.contextBudgetChars}
+            onChange={(e) => onChange({ contextBudgetChars: Number(e.target.value) })}
+          />
+        </label>
+        <p className="muted small">Lower this for small local models.</p>
       </fieldset>
 
       <fieldset>
@@ -285,8 +385,8 @@ export function SettingsPanel({ app, onChange, onChooseExportDir }: Props) {
           />
         </label>
         <p className="muted small">
-          Hotkeys: Ctrl+Shift+Space suggest · Ctrl+Shift+H show/hide · Ctrl+Shift+M click-through.
-          The overlay is hidden from screen sharing.
+          Hotkeys: Ctrl+Shift+Space answer · Ctrl+Alt+Space read my screen · Ctrl+Shift+H show/hide
+          · Ctrl+Shift+M click-through.
         </p>
       </fieldset>
     </div>

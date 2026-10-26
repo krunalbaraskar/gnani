@@ -22,22 +22,31 @@ const RATE = 16_000;
 const TTS_URL = process.env['GNANI_TTS_URL'] ?? 'https://api.vachana.ai/api/v1/tts/inference';
 const VOICES = { them: 'Poorvi', me: 'Roopesh' } as const;
 
-/** them = customer, me = the user (a fictional insurance advisor). */
+/**
+ * them = a dealer, me = the user (a fictional paint distributor's rep). Every question
+ * can be answered from the files in demo-context/, so load that folder for the demo.
+ */
 const SCRIPT: { speaker: 'me' | 'them'; text: string }[] = [
-  {
-    speaker: 'me',
-    text: 'Hello, good afternoon! Main Rohan bol raha hoon, Suraksha Life Insurance se.',
-  },
+  { speaker: 'me', text: 'Hello, namaste! Sharma Paints se Rohan bol raha hoon.' },
   {
     speaker: 'them',
-    text: 'Haan ji, boliye. Maine website pe term insurance ke liye form bhara tha.',
+    text: 'Haan Rohan ji, Mehta Hardware se bol rahe hain. Monsoon order ke baare mein baat karni thi.',
   },
-  { speaker: 'me', text: 'Ji bilkul, thank you. Aapko kitne ka cover chahiye tha?' },
-  { speaker: 'them', text: 'Around one crore ka socha hai. Premium kitna hoga monthly?' },
-  { speaker: 'me', text: 'Aapki age aur health details pe depend karega. Aap smoke karte hain?' },
-  { speaker: 'them', text: 'Nahi, main smoke nahi karti. Aur kya isme tax benefit bhi milta hai?' },
-  { speaker: 'me', text: 'Haan ji, section eighty C ke under benefit milta hai.' },
-  { speaker: 'them', text: 'Theek hai. Claim settlement kitne din mein hota hai?' },
+  { speaker: 'me', text: 'Ji bilkul, bataiye kya chahiye.' },
+  {
+    speaker: 'them',
+    text: 'Blue wala exterior emulsion, five litre pack, kitna stock pada hai aapke paas?',
+  },
+  { speaker: 'me', text: 'Ek second, main abhi check karke batata hoon.' },
+  {
+    speaker: 'them',
+    text: 'Aur agar hum sattar units lein, toh thok mein kya rate lagega?',
+  },
+  { speaker: 'me', text: 'Ji, wholesale rate lagega, main confirm karta hoon.' },
+  {
+    speaker: 'them',
+    text: 'Theek hai. Aur delivery ka kya hai, pichhli baar aapne kitne din bola tha?',
+  },
 ];
 
 function apiKey(): string {

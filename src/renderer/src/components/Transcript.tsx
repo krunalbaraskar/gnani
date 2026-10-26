@@ -9,6 +9,25 @@ interface Props {
   startedAt: number | null;
 }
 
+/** One line of the conversation. "Them" lines can be clicked to (re)explain them. */
+export function Line({ segment: s, when }: { segment: TranscriptSegment; when?: string }) {
+  const them = s.speaker === 'them';
+  return (
+    <div
+      className={`line line-${s.speaker} ${them ? 'clickable' : ''}`}
+      onClick={them ? () => window.bolo.requestMeaning(s.id) : undefined}
+      title={them ? 'Click to explain this line' : undefined}
+    >
+      <span className="who">{them ? 'Them' : 'Me'}</span>
+      <span className="text" lang="und">
+        {s.text}
+        {s.meaning && <span className="meaning">{s.meaning}</span>}
+      </span>
+      {when && <span className="when">{when}</span>}
+    </div>
+  );
+}
+
 export function Transcript({ segments, partial, processing, startedAt }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -34,13 +53,7 @@ export function Transcript({ segments, partial, processing, startedAt }: Props) 
         <p className="empty">The live transcript appears here.</p>
       )}
       {segments.map((s) => (
-        <div key={s.id} className={`line line-${s.speaker}`}>
-          <span className="who">{s.speaker === 'me' ? 'Me' : 'Them'}</span>
-          <span className="text" lang="und">
-            {s.text}
-          </span>
-          <span className="when">{formatClock(s.at - t0)}</span>
-        </div>
+        <Line key={s.id} segment={s} when={formatClock(s.at - t0)} />
       ))}
       {pending.map((s) => (
         <div key={`pending-${s}`} className={`line line-${s} pending`}>

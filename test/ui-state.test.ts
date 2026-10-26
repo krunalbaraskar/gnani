@@ -12,13 +12,15 @@ import { DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 const app: AppState = {
   settings: DEFAULT_SETTINGS,
   languages: [],
-  keys: { gnani: true, llm: false },
+  keys: { stt: true, llm: false },
+  stt: { name: 'Gnani', keyVar: 'GNANI_API_KEY', url: 'wss://x' },
   llm: { baseUrl: 'http://x', model: 'm' },
-  sttUrl: 'wss://x',
   platform: 'win32',
   clickThrough: false,
   sessionRunning: false,
   demoAudioDir: '/tmp/demo',
+  context: { dir: '', files: [], skipped: [] },
+  shareProtection: 'unverified',
 };
 
 const seg = (id: string, speaker: 'me' | 'them', at: number) => ({ id, speaker, text: id, at });

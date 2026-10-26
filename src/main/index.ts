@@ -16,15 +16,28 @@ import {
   IPC,
   type AppState,
   type BoloEvent,
+  type ContextView,
+  type ShareProtection,
+  type StartResult,
   type DemoAudio,
   type StopResult,
   type WindowCommand,
 } from '../shared/ipc.ts';
+import { CONSENT_VERSION } from '../shared/settings.ts';
 import { SPEAKERS, type Speaker } from '../shared/transcript/types.ts';
-import { loadEnv } from './env.ts';
+import type { LoadedContext } from '../core/context/context.ts';
+import { contextView, readContextDir } from './context-loader.ts';
+import { loadEnv, sttInfo } from './env.ts';
 import { writeSessionExport } from './export-writer.ts';
-import { createOverlayWindow, setClickThrough } from './overlay-window.ts';
+import {
+  createOverlayWindow,
+  OVERLAY_MAX_HEIGHT,
+  OVERLAY_MIN_HEIGHT,
+  OVERLAY_WIDTH,
+  setClickThrough,
+} from './overlay-window.ts';
 import { installMediaHandlers } from './permissions.ts';
+import { captureScreen } from './screen-capture.ts';
 import { llmConfig, SessionController } from './session-controller.ts';
 import { SettingsStore } from './settings-store.ts';
 
@@ -32,7 +45,30 @@ const HOTKEYS = {
   suggest: 'CommandOrControl+Shift+Space',
   toggleOverlay: 'CommandOrControl+Shift+H',
   clickThrough: 'CommandOrControl+Shift+M',
+  // Not Ctrl+Shift+S: that is "Save As" in most apps, and this one sends a screenshot.
+  askScreen: 'CommandOrControl+Alt+Space',
 } as const;
+
+/**
+ * Where "hidden from screen share" was checked by hand (docs/WINDOWS_TESTING.md): the
+ * platform and the lowest OS build tested. Empty until that check passes; the overlay
+ * only claims to be hidden on machines this covers.
+ */
+const SHARE_PROTECTION_VERIFIED: { platform: NodeJS.Platform; minBuild: number }[] = [
+  // Windows 11 build 26100, 2026-10-09: absent from a GDI screen capture with the transparent
+  // window and with BOLO_OPAQUE_WINDOW=1; present in both with BOLO_RECORDABLE=1.
+  { platform: 'win32', minBuild: 26100 },
+];
+
+function shareProtection(recordable: boolean): ShareProtection {
+  if (recordable) return 'demo';
+  const build = Number(process.getSystemVersion().split('.').pop());
+  return SHARE_PROTECTION_VERIFIED.some(
+    (v) => v.platform === process.platform && build >= v.minBuild,
+  )
+    ? 'hidden'
+    : 'unverified';
+}
 
 const log = consoleLogger;
 let overlay: BrowserWindow | null = null;
@@ -41,7 +77,10 @@ let clickThrough = false;
 // Pin the name and settings folder (%APPDATA%\Bolo) however the app is launched;
 // otherwise `electron <script>` would use "Electron".
 app.setName('Bolo');
-app.setPath('userData', join(app.getPath('appData'), 'Bolo'));
+// BOLO_USER_DATA lets the end-to-end test use a throwaway folder: on Windows the appData
+// path does not follow the APPDATA environment variable.
+const testUserData = app.isPackaged ? undefined : process.env['BOLO_USER_DATA'];
+app.setPath('userData', testUserData || join(app.getPath('appData'), 'Bolo'));
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -55,7 +94,32 @@ void app.whenReady().then(() => {
   const emit = (e: BoloEvent) => {
     if (overlay && !overlay.isDestroyed()) overlay.webContents.send(IPC.event, e);
   };
-  const controller = new SessionController(loadEnv, () => settings.get(), emit, log);
+  // The user's reference files. Only names and sizes ever go to the renderer.
+  let context: { context: LoadedContext; error?: string } = {
+    context: { files: [], skipped: [], chunks: [] },
+  };
+  let contextLoads = 0;
+  const loadContextDir = (): Promise<ContextView> => {
+    const dir = settings.get().contextDir;
+    const load = ++contextLoads;
+    return readContextDir(dir).then((loaded) => {
+      // A slow read of a folder the user has since changed must not win.
+      if (load !== contextLoads) return contextView(settings.get().contextDir, context);
+      context = loaded;
+      const view = contextView(dir, loaded);
+      emit({ type: 'context', context: view });
+      return view;
+    });
+  };
+  void loadContextDir();
+
+  const controller = new SessionController(
+    loadEnv,
+    () => settings.get(),
+    () => (context.context.files.length ? context.context : null),
+    emit,
+    log,
+  );
 
   const isOwn = (id: number) =>
     !!overlay && !overlay.isDestroyed() && overlay.webContents.id === id;
@@ -64,6 +128,7 @@ void app.whenReady().then(() => {
   overlay = createOverlayWindow({
     opaque: env.opaqueWindow,
     opacity: settings.get().overlayOpacity,
+    protect: !env.recordable,
   });
   overlay.on('closed', () => (overlay = null));
 
@@ -84,30 +149,44 @@ void app.whenReady().then(() => {
     const e = loadEnv();
     const s = settings.get();
     const llm = llmConfig(s, e);
+    const stt = sttInfo(e);
     return {
       settings: s,
       languages: GNANI_LANGUAGES.map((l) => ({ ...l })),
-      keys: { gnani: !!e.gnaniApiKey, llm: !!e.llmApiKey },
+      keys: { stt: stt.key, llm: !!e.llmApiKey },
+      stt: { name: stt.name, keyVar: stt.keyVar, url: stt.url },
       llm: { baseUrl: llm.baseUrl, model: llm.model },
-      sttUrl: e.gnaniSttUrl,
       platform: process.platform,
       clickThrough,
       sessionRunning: controller.running,
       demoAudioDir: demoDir,
+      context: contextView(s.contextDir, context),
+      // The window's protection was fixed at startup; a later .env edit must not change the claim.
+      shareProtection: shareProtection(env.recordable),
     };
   });
 
   handle(IPC.updateSettings, (patch: unknown) => {
-    // The export folder is only ever set through the folder dialog in this process.
-    const { exportDir: _ignored, ...safe } = (
-      patch && typeof patch === 'object' ? patch : {}
-    ) as Record<string, unknown>;
+    // Folders are only ever set through the folder dialogs in this process.
+    const {
+      exportDir: _ignored,
+      contextDir: _alsoIgnored,
+      ...safe
+    } = (patch && typeof patch === 'object' ? patch : {}) as Record<string, unknown>;
     const next = settings.update(safe);
     if (env.opaqueWindow) overlay?.setOpacity(next.overlayOpacity);
     return next;
   });
 
-  handle(IPC.startSession, () => controller.start());
+  // Files are re-read at call start, so edits made since the last call are picked up.
+  handle(IPC.startSession, async (): Promise<StartResult> => {
+    const s = settings.get();
+    if (!s.consentAcknowledged || s.consentVersion < CONSENT_VERSION) {
+      return { ok: false, error: 'Read and accept the notice first.' };
+    }
+    await loadContextDir();
+    return controller.start();
+  });
 
   /** Stops the session and exports it. `interactive` allows asking for a folder. */
   async function finishSession(interactive: boolean): Promise<StopResult> {
@@ -138,6 +217,33 @@ void app.whenReady().then(() => {
     return dir;
   }
   handle(IPC.chooseExportDir, chooseDir);
+
+  handle(IPC.chooseContextDir, async (): Promise<ContextView> => {
+    const opts = {
+      title: 'Folder with the files Bolo should answer from',
+      properties: ['openDirectory' as const],
+    };
+    const r = overlay
+      ? await dialog.showOpenDialog(overlay, opts)
+      : await dialog.showOpenDialog(opts);
+    const dir = r.canceled ? null : r.filePaths[0];
+    if (dir) settings.update({ contextDir: dir });
+    return loadContextDir();
+  });
+  handle(IPC.reloadContext, loadContextDir);
+
+  const capture = () => captureScreen(overlay);
+  ipcMain.on(IPC.ask, (e, text: unknown, withScreen: unknown) => {
+    if (!trusted(e) || typeof text !== 'string') return;
+    const question = text.trim().slice(0, 500);
+    if (question) void controller.ask(question, withScreen === true ? capture : undefined);
+  });
+  ipcMain.on(IPC.askScreen, (e) => {
+    if (trusted(e)) void controller.askScreen(capture);
+  });
+  ipcMain.on(IPC.requestMeaning, (e, id: unknown) => {
+    if (trusted(e) && typeof id === 'string') controller.requestMeaning(id);
+  });
 
   ipcMain.on(IPC.openExportDir, (e) => {
     const dir = settings.get().exportDir;
@@ -175,9 +281,16 @@ void app.whenReady().then(() => {
         toggleClickThrough();
         break;
       case 'resize': {
-        const w = Math.round(Math.max(320, Math.min(1600, Number(cmd.width) || 0)));
-        const h = Math.round(Math.max(300, Math.min(1400, Number(cmd.height) || 0)));
-        overlay.setSize(w, h);
+        // Width is fixed; the renderer reports how tall its content is.
+        const h = Math.round(
+          Math.max(OVERLAY_MIN_HEIGHT, Math.min(OVERLAY_MAX_HEIGHT, Number(cmd.height) || 0)),
+        );
+        if (overlay.getSize()[1] !== h) {
+          // setSize ignores resizable:false only on some platforms, so lift it briefly.
+          overlay.setResizable(true);
+          overlay.setSize(OVERLAY_WIDTH, h);
+          overlay.setResizable(false);
+        }
         break;
       }
       case 'quit':
@@ -215,6 +328,7 @@ void app.whenReady().then(() => {
     else overlay.showInactive(); // don't steal focus from the call
   });
   register(HOTKEYS.clickThrough, toggleClickThrough);
+  register(HOTKEYS.askScreen, () => void controller.askScreen(capture));
 
   // Quitting mid-call still saves the transcript (if an export folder is set).
   let quitting = false;

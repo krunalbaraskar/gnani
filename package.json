@@ -27,7 +27,8 @@
     "dist:win": "npm run build && electron-builder --win --config electron-builder.yml",
     "mock-gnani": "node scripts/mock-gnani.ts",
     "test:e2e": "node scripts/e2e-electron.mjs",
-    "test:ui": "node scripts/ui-smoke.mjs"
+    "mock-llm": "node scripts/mock-llm.ts",
+    "test:live": "node scripts/e2e-live.mjs"
   },
   "dependencies": {
     "ws": "^8.22.0"

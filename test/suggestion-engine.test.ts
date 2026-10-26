@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { LlmProvider, LlmRequest } from '../src/core/llm/types.ts';
+import { LlmError } from '../src/core/llm/types.ts';
 import { type Suggestion, SuggestionEngine } from '../src/core/suggest/engine.ts';
+import { waitFor } from './helpers/wait.ts';
 
 /** Provider that yields scripted tokens, waiting `delayMs` between them. */
 function fakeProvider(
@@ -114,5 +116,148 @@ describe('SuggestionEngine', () => {
     const engine = new SuggestionEngine(() => provider, recorder().events);
     await engine.request({ ...base, contextNote: 'selling insurance', trigger: 'hotkey' });
     expect(provider.calls[0]!.messages[1]!.content).toContain('selling insurance');
+  });
+});
+
+describe('SuggestionEngine: grounded answers', () => {
+  const chunks = [{ file: 'inventory.csv', text: 'item,qty\nBlue 5L,142' }];
+  const grounded = { ...base, contextLoaded: true, chunks, trigger: 'hotkey' as const };
+
+  it('strips the source line, hides it while streaming, and sets the verdict', async () => {
+    const r = recorder();
+    const seen: string[] = [];
+    const engine = new SuggestionEngine(
+      () => fakeProvider(['142 units', ' hain.', '\n[source:', ' inventory.csv]']),
+      { ...r.events, onToken: (_id, _t, all) => seen.push(all) },
+    );
+    const s = await engine.request(grounded);
+    expect(s?.text).toBe('142 units hain.');
+    expect(s?.verdict).toBe('files');
+    expect(s?.sources).toEqual(['inventory.csv']);
+    expect(seen.every((t) => !t.includes('[source'))).toBe(true);
+    expect(r.started[0]?.verdict).toBeUndefined(); // nothing is claimed before the check
+  });
+
+  it('marks an invented figure as unverified even when a file is cited', async () => {
+    const engine = new SuggestionEngine(
+      () => fakeProvider(['900 units hain.\n[source: inventory.csv]']),
+      recorder().events,
+    );
+    expect((await engine.request(grounded))?.verdict).toBe('unverified');
+  });
+
+  it('sends screen questions to the vision provider and labels them screen', async () => {
+    const text = fakeProvider(['text']);
+    const vision = fakeProvider(['It says 99.\n[source: screen]']);
+    const engine = new SuggestionEngine((v) => (v ? vision : text), recorder().events);
+    const s = await engine.request({
+      ...grounded,
+      trigger: 'screen',
+      image: 'data:image/jpeg;base64,AA',
+    });
+    expect(text.calls).toHaveLength(0);
+    expect(vision.calls[0]!.messages[1]!.content).toEqual([
+      expect.objectContaining({ type: 'text' }),
+      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AA' } },
+    ]);
+    expect(s?.verdict).toBe('screen');
+    expect(s?.usedScreen).toBe(true);
+  });
+
+  it('explains what to change when the model rejects an image or a long prompt', async () => {
+    const failing = (message: string) => ({
+      name: 'fake',
+      // eslint-disable-next-line require-yield
+      async *streamChat(): AsyncIterable<string> {
+        throw new LlmError(message, 400);
+      },
+    });
+    const img = new SuggestionEngine(
+      () => failing('LLM request failed (HTTP 400): no images'),
+      recorder().events,
+    );
+    expect((await img.request({ ...grounded, trigger: 'screen', image: 'data:x' }))?.error).toMatch(
+      /cannot read images. Set a vision model in Settings/,
+    );
+    const long = new SuggestionEngine(
+      () => failing('LLM request failed (HTTP 400): maximum context length exceeded'),
+      recorder().events,
+    );
+    expect((await long.request(grounded))?.error).toMatch(/Lower the context budget in Settings/);
+  });
+});
+
+describe('SuggestionEngine: held-back automatic answers', () => {
+  const auto = (question: string) => ({ ...base, trigger: 'auto' as const, question });
+
+  it('answers a second quick question once the first answer and the cooldown are done', async () => {
+    const r = recorder();
+    const engine = new SuggestionEngine(() => fakeProvider(['ok'], 15), r.events, {
+      autoCooldownMs: 40,
+    });
+    void engine.request(auto('stock?'));
+    expect(await engine.request(auto('older, replaced'))).toBeNull();
+    expect(await engine.request(auto('bulk rate?'))).toBeNull(); // newest one is kept
+    await waitFor(() => r.done.length === 2, 2000);
+    expect(r.done.map((s) => s.question)).toEqual(['stock?', 'bulk rate?']);
+  });
+
+  it('builds a held request only when it runs', async () => {
+    const r = recorder();
+    const engine = new SuggestionEngine(() => fakeProvider(['ok'], 15), r.events, {
+      autoCooldownMs: 30,
+    });
+    let built = 0;
+    void engine.request(auto('first'));
+    void engine.requestAuto(() => {
+      built++;
+      return auto('second');
+    });
+    expect(built).toBe(0);
+    await waitFor(() => r.done.length === 2, 2000);
+    expect(built).toBe(1);
+  });
+
+  it('does not replace an answer the user asked for until its protection ends', async () => {
+    const r = recorder();
+    const engine = new SuggestionEngine(() => fakeProvider(['ok']), r.events, {
+      autoCooldownMs: 0,
+      manualProtectMs: 60,
+    });
+    await engine.request({ ...base, trigger: 'typed', asked: 'what did we promise?' });
+    expect(await engine.request(auto('stock?'))).toBeNull();
+    expect(r.done).toHaveLength(1);
+    await waitFor(() => r.done.length === 2, 2000);
+    expect(r.done[1]?.question).toBe('stock?');
+  });
+
+  it('drops a held question that has become too old', async () => {
+    let now = 0;
+    const r = recorder();
+    const engine = new SuggestionEngine(() => fakeProvider(['ok'], 15), r.events, {
+      autoCooldownMs: 30,
+      heldMaxAgeMs: 20,
+      now: () => now,
+    });
+    void engine.request(auto('first'));
+    void engine.request(auto('late'));
+    await waitFor(() => r.done.length === 1, 2000);
+    now = 100; // cooldown over, but the held question is 100 ms old
+    await new Promise((res) => setTimeout(res, 80));
+    expect(r.done).toHaveLength(1);
+  });
+
+  it('a manual request does not reset the automatic cooldown, and cancel() forgets the held one', async () => {
+    const r = recorder();
+    const engine = new SuggestionEngine(() => fakeProvider(['ok'], 10), r.events, {
+      autoCooldownMs: 30,
+      manualProtectMs: 0,
+    });
+    void engine.request(auto('first'));
+    void engine.request(auto('held'));
+    engine.cancel();
+    await new Promise((res) => setTimeout(res, 80));
+    expect(r.done.map((s) => s.question)).toEqual(['first']);
+    expect(r.done[0]?.cancelled).toBe(true);
   });
 });

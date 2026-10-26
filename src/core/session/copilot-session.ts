@@ -4,8 +4,10 @@ import { SilenceGate } from '../../shared/audio/silence-gate.ts';
 import { TranscriptBuffer } from '../../shared/transcript/buffer.ts';
 import { SPEAKERS, type Speaker, type TranscriptSegment } from '../../shared/transcript/types.ts';
 import type { Settings } from '../../shared/settings.ts';
+import { selectChunks, type LoadedContext } from '../context/context.ts';
+import { GlossEngine } from '../gloss/engine.ts';
 import type { LlmProvider } from '../llm/types.ts';
-import { SuggestionEngine, type Suggestion } from '../suggest/engine.ts';
+import { SuggestionEngine, type Suggestion, type SuggestRequest } from '../suggest/engine.ts';
 import type { SttProvider, SttStatus, SttStream, SttTranscript } from '../stt/types.ts';
 import { type Logger, silentLogger } from '../util/logger.ts';
 import type { SessionRecord } from './types.ts';
@@ -22,11 +24,18 @@ export interface SessionEvents {
   onSuggestionStart(s: Suggestion): void;
   onSuggestionToken(id: string, token: string, textSoFar: string): void;
   onSuggestionDone(s: Suggestion): void;
+  onMeaning?(id: string, meaning: string): void;
 }
 
 export interface CopilotSessionDeps {
   stt: SttProvider;
   llm: () => LlmProvider;
+  /** Model for requests that carry a screenshot. Defaults to `llm`. */
+  llmVision?: () => LlmProvider;
+  /** The user's reference files, or null if no folder is loaded. Read on every answer. */
+  context?: () => LoadedContext | null;
+  /** Name of the language the user reads, e.g. "English", for meanings. */
+  myLanguageLabel?: () => string;
   /** Read on every use, so settings changed mid-call apply immediately. */
   settings: () => Settings;
   events: SessionEvents;
@@ -44,6 +53,7 @@ export class CopilotSession {
   readonly transcript = new TranscriptBuffer();
   private readonly deps: CopilotSessionDeps;
   private readonly engine: SuggestionEngine;
+  private readonly gloss: GlossEngine;
   private readonly now: () => number;
   private readonly log: Logger;
   private streams = new Map<Speaker, SttStream>();
@@ -66,12 +76,27 @@ export class CopilotSession {
       suggestions: [],
       echoesRemoved: 0,
     };
-    this.engine = new SuggestionEngine(
+    this.gloss = new GlossEngine(
       deps.llm,
+      (id, meaning) => {
+        if (this.transcript.setMeaning(id, meaning)) deps.events.onMeaning?.(id, meaning);
+      },
+      { now: this.now, logger: this.log },
+    );
+    this.engine = new SuggestionEngine(
+      (vision) => (vision && deps.llmVision ? deps.llmVision() : deps.llm()),
       {
-        onStart: (x) => deps.events.onSuggestionStart(x),
+        // An answer never waits behind a meaning request.
+        onStart: (x) => {
+          this.gloss.hold();
+          deps.events.onSuggestionStart(x);
+        },
         onToken: (id, t, all) => deps.events.onSuggestionToken(id, t, all),
-        onDone: (x) => deps.events.onSuggestionDone(x),
+        onDone: (x) => {
+          // A cancelled answer finishes after its replacement has started.
+          if (!this.engine.busy) this.gloss.release();
+          deps.events.onSuggestionDone(x);
+        },
       },
       { now: this.now, logger: this.log, autoCooldownMs: deps.autoSuggestCooldownMs },
     );
@@ -116,12 +141,36 @@ export class CopilotSession {
     return this.engine.request(this.suggestRequest('hotkey'));
   }
 
+  /** A question typed into the Ask box, optionally with a screenshot (data URL). */
+  ask(text: string, image?: string): Promise<Suggestion | null> {
+    if (!this.running) return Promise.resolve(null);
+    return this.engine.request({
+      ...this.suggestRequest(image ? 'screen' : 'typed', text),
+      asked: text,
+      image,
+    });
+  }
+
+  /** "Answer from my screen": no typed question, just the screenshot. */
+  askScreen(image: string): Promise<Suggestion | null> {
+    if (!this.running) return Promise.resolve(null);
+    return this.engine.request({ ...this.suggestRequest('screen'), image });
+  }
+
+  /** The user clicked a "them" line to have it explained (again). */
+  requestMeaning(id: string): void {
+    const seg = this.transcript.all().find((s) => s.id === id && s.speaker === 'them');
+    if (seg && this.running) this.gloss.requestAgain(seg.id, seg.text, this.myLanguage());
+  }
+
   async stop(): Promise<SessionRecord> {
     if (!this.running) return this.snapshot();
     this.running = false;
-    await Promise.all([...this.streams.values()].map((s) => s.close()));
+    // allSettled: a stream that fails to close must not skip the cancels below or lose the record.
+    await Promise.allSettled([...this.streams.values()].map((s) => s.close()));
     this.streams.clear();
     this.engine.cancel();
+    this.gloss.stop();
     this.record.endedAt = this.now();
     return this.snapshot();
   }
@@ -161,6 +210,8 @@ export class CopilotSession {
         if (isEcho(seg, recentThem, { windowMs: ECHO_WINDOW_MS })) {
           this.record.echoesRemoved++;
           this.deps.events.onPartial('me', '');
+          // Never shown, but the overlay counts removed echoes from this event.
+          this.deps.events.onSegmentRemoved(seg.id, 'echo');
           this.log.info('dropped echo segment', { id: seg.id });
           return;
         }
@@ -178,19 +229,42 @@ export class CopilotSession {
     this.transcript.add(seg);
     this.deps.events.onSegment(seg);
 
+    if (seg.speaker === 'them' && settings.explainThem) {
+      this.gloss.enqueue(seg.id, seg.text, this.myLanguage());
+    }
     if (seg.speaker === 'them' && settings.autoSuggest && detectQuestion(seg.text).isQuestion) {
-      void this.engine.request(this.suggestRequest('auto', seg.text));
+      // Built when it runs, so a held question is answered with the transcript as it is then.
+      void this.engine.requestAuto(() => this.suggestRequest('auto', seg.text));
     }
   }
 
-  private suggestRequest(trigger: 'hotkey' | 'auto', question?: string) {
+  private myLanguage(): string {
+    return this.deps.myLanguageLabel?.() ?? 'English';
+  }
+
+  /** `question`: what the answer is about (their question, or the user's typed one). */
+  private suggestRequest(trigger: SuggestRequest['trigger'], question?: string): SuggestRequest {
     const s = this.deps.settings();
+    const context = this.deps.context?.() ?? null;
+    const contextLoaded = !!context && context.files.length > 0;
+    const lastThem = this.transcript
+      .since(0, 'them')
+      .slice(-3)
+      .map((t) => t.text);
     return {
       segments: this.transcript.getRecent(s.transcriptMinutes, this.now()),
       contextNote: s.contextNote,
       outputLanguage: s.outputLanguage,
       trigger,
-      question,
+      question: trigger === 'auto' ? question : undefined,
+      contextLoaded,
+      chunks: contextLoaded
+        ? selectChunks(
+            context.chunks,
+            [question ?? '', ...lastThem].join(' '),
+            s.contextBudgetChars,
+          )
+        : undefined,
     };
   }
 }

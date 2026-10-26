@@ -35,6 +35,8 @@ export interface MockGnaniOptions {
   dropAfterFrames?: number;
   /** Also send a partial transcript before each final one. */
   sendPartials?: boolean;
+  /** Refuse other lang_codes like the real server: an `error` message, then close 1008. */
+  languages?: string[];
 }
 
 export interface ConnectionRecord {
@@ -49,8 +51,10 @@ const SAMPLE_RATE = 16_000;
 
 export class MockGnaniServer {
   readonly connections: ConnectionRecord[] = [];
-  private readonly opts: Required<Omit<MockGnaniOptions, 'script' | 'dropAfterFrames'>> &
-    Pick<MockGnaniOptions, 'script' | 'dropAfterFrames'>;
+  private readonly opts: Required<
+    Omit<MockGnaniOptions, 'script' | 'dropAfterFrames' | 'languages'>
+  > &
+    Pick<MockGnaniOptions, 'script' | 'dropAfterFrames' | 'languages'>;
   private http: Server | null = null;
   private wss: WebSocketServer | null = null;
   private rejected = 0;
@@ -116,6 +120,12 @@ export class MockGnaniServer {
       transcripts: [],
     };
     this.connections.push(record);
+    const lang = String(req.headers['lang_code'] ?? '');
+    if (this.opts.languages && !this.opts.languages.includes(lang)) {
+      ws.send(JSON.stringify({ type: 'error', message: `does not support languages: ${lang}` }));
+      ws.close(1008);
+      return;
+    }
     const sampleRate = Number(req.headers['x-sample-rate'] ?? SAMPLE_RATE);
     ws.send(
       JSON.stringify({

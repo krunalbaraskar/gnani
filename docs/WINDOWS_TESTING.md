@@ -1,140 +1,127 @@
 # Testing Bolo on Windows
 
-Everything below was written without access to Windows or real audio hardware. The
-pure modules, the STT client, the LLM client and the session logic are covered by
-`npm test`. The overlay UI, WAV replay in the renderer and the mic → AudioWorklet path
-were also exercised in headless Chromium (`scripts/ui-smoke.mjs`). What has **not**
-been run anywhere yet: Electron itself, Windows system-audio loopback, the real Gnani
-API, hotkeys, click-through and screen-share protection. These steps cover them.
+What has been run on Windows 11 (build 26100), and what still needs a person.
+
+| Check                                                    | How it was run                    | Result                                            |
+| -------------------------------------------------------- | --------------------------------- | ------------------------------------------------- |
+| Lint, typecheck, 222 unit tests                          | `npm run lint; typecheck; test`   | Pass                                              |
+| Whole app against mock Gnani and mock AI (28 checks)     | `npm run test:e2e`                | Pass                                              |
+| Live mic + system-audio loopback into mock Gnani         | `npm run test:live`               | Pass: both streams deliver audio                  |
+| Overlay absent from a screen capture, transparent window | GDI screen capture, protection on | Absent                                            |
+| Overlay absent from a screen capture, opaque window      | same, `BOLO_OPAQUE_WINDOW=1`      | Absent                                            |
+| Overlay present with `BOLO_RECORDABLE=1`                 | same, both window modes           | Present, as intended                              |
+| Real Gnani API                                           | —                                 | **Not run yet** (needs your key)                  |
+| Real AI model, and a real vision model for the screen    | —                                 | **Not run yet** (needs your key)                  |
+| Overlay hidden inside a real Zoom/Meet/Teams share       | —                                 | **Not run yet** (needs a second person or device) |
+| Global hotkeys from another app, click-through, drag     | —                                 | **Not run yet** (needs hands)                     |
+| Installer                                                | —                                 | **Not run yet**                                   |
 
 Commands are for **PowerShell** in the repository folder.
 
 ## 0. One-time setup
 
 1. Install Node.js 22 LTS (or newer) and Git.
-2. `npm ci`
+2. `npm ci`. If Electron later reports it failed to install, run
+   `node node_modules/electron/install.js` once (your npm skips install scripts).
 3. `copy .env.example .env` and fill in `GNANI_API_KEY`, plus the `LLM_*` values (see
    the README). For an installed build, put the same `.env` in `%APPDATA%\Bolo\.env`.
 4. Sanity checks — all must pass:
    ```powershell
    npm run lint; npm run typecheck; npm test
    ```
+5. The automated app checks:
+   ```powershell
+   npm run build; npm i --no-save playwright
+   npm run test:e2e; npm run test:live
+   ```
 
 To reset first-run state (consent notice, settings), quit Bolo and delete
-`%APPDATA%\Bolo\settings.json` (in dev, Electron may use `%APPDATA%\bolo` instead).
+`%APPDATA%\Bolo\settings.json`.
 
-## 1. Offline run against the mock Gnani server (no credits used)
+## 1. Offline run with no keys
 
-Checks Electron, IPC, the MessagePort audio path and the overlay without touching the
-real API.
+Follow [Try it with no keys](../README.md#try-it-with-no-keys) in the README. Expected:
 
-```powershell
-# Terminal 1
-npm run mock-gnani
-# Terminal 2
-$env:GNANI_API_KEY = "test-key"
-$env:GNANI_STT_URL = "ws://127.0.0.1:8787/stt/v3/stream"
-npm run dev
-```
-
-1. The consent notice appears. Click **I understand**. The settings panel opens.
-2. Settings → Audio → **Replay WAV files**. Go back (←).
-3. **Them: choose WAV** → `test\fixtures\them.wav`; **Me: choose WAV** → `test\fixtures\me.wav`.
-4. **▶ Start replay**. Expected:
-   - Red **● Listening** badge in the title bar, both level meters moving.
-   - Both status pills turn green ("connected"), then show a latency in ms.
-   - Within ~6 s, three **Them** lines and two **Me** lines (synthetic Hinglish). The
-     mock "transcribes" tones, so the text is scripted.
-   - "1 echoed line(s) removed from Me" — `me.wav` contains a quiet copy of their first line.
-   - A **Suggested reply (question detected)** card after "premium kitna hoga monthly…".
-     It needs a working LLM in `.env`; otherwise it shows the LLM error, which is fine here.
-5. After the replay ends, the session stops by itself and asks for an export folder.
-   Pick one. Check that `bolo-session-*.md` and `.json` exist and read sensibly.
+- A slim bar at the top-centre of the screen. The window is only as tall as the bar until
+  you expand it.
+- After **Start**: a call timer, two green dots (Them, Me), and the Live tab.
+- "They said" shows the dealer's question with its meaning in English underneath.
+- **Answer · from your files** with the chips `inventory.csv` and `price-list.md`.
+- Typing `what did we promise on delivery?` gives an answer from `project-notes.md`.
+- Typing `what is their GST number?` gives the dashed **Answer · not in your files** card.
+- The Transcript tab shows three Them lines and two Me lines; `me.wav` contains a quiet
+  copy of their first line, which is removed as echo.
+- When the replay ends, the session stops by itself and asks for an export folder. The
+  Markdown file names the sources of each answer.
 
 ## 2. Overlay window behaviour
 
-| Check                    | How                                                                                            | Expected                                                                      |
-| ------------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Always on top            | Open a browser full-screen video (F11)                                                         | Overlay stays above it                                                        |
-| Drag                     | Drag the title bar                                                                             | Window moves                                                                  |
-| Resize                   | Drag a window edge, and the grip in the bottom-right corner                                    | Window resizes (the grip works even if edges don't — see Troubleshooting)     |
-| Show/hide                | `Ctrl+Shift+H` from any app                                                                    | Toggles; focus stays in the other app                                         |
-| Click-through            | `Ctrl+Shift+M`                                                                                 | Orange border + banner; clicks reach the app underneath; press again to undo  |
-| Hidden from screen share | Share your entire screen in Zoom/Meet/Teams, or record with OBS or Snipping Tool (Win+Shift+R) | Overlay is invisible/black in the shared or recorded image but visible to you |
-| Taskbar                  | —                                                                                              | Bolo has a taskbar entry; quitting with × ends the session                    |
+| Check                    | How                                                              | Expected                                                                                    |
+| ------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Always on top            | Open a browser full-screen video (F11)                           | Bar stays above it                                                                          |
+| Drag                     | Drag the bar by an empty part of it                              | Window moves                                                                                |
+| Height follows content   | Expand and collapse; switch tabs                                 | No dead area under the panel that blocks clicks on the app below                            |
+| Show/hide                | `Ctrl+Shift+H` from any app                                      | Toggles; focus stays in the other app                                                       |
+| Click-through            | `Ctrl+Shift+M`                                                   | Amber border and a strip; clicks reach the app underneath; press again to undo              |
+| Hidden from screen share | Share your entire screen in Zoom/Meet/Teams with a second device | Bar is absent on the viewer's screen but visible to you                                     |
+| Shield                   | Hover the shield in the bar                                      | Green "Hidden from screen share" on Windows 11 build 26100 or newer; amber otherwise        |
+| Demo mode                | `BOLO_RECORDABLE=1`                                              | Amber shield reads "Visible in recordings (demo mode)"; Bolo shows up in a screen recording |
+
+If the bar **is** visible to the viewer in a real share, remove the entry from
+`SHARE_PROTECTION_VERIFIED` in `src/main/index.ts` so the shield stops claiming it, and
+note the app and Windows build.
 
 ## 3. Real Gnani with file replay (uses credits)
 
 Remove the mock variables (`Remove-Item Env:GNANI_STT_URL`), and set your real key in `.env`.
 
-1. Make demo audio with real speech. Either:
-   - `npm run demo-audio` — synthesises a short Hinglish insurance call with Gnani's
-     own TTS into `demo-audio\me.wav` and `demo-audio\them.wav` (synthetic voices, no
-     personal data). Then click **Demo** in the overlay. Or:
-   - Record two WAV files yourself (any rate/channels; 16-bit, 24-bit or float).
-2. Settings → Speech-to-text → **Hindi**. Start replay with **Play aloud** on.
-3. Expected: real transcripts for both sides; latency pills show measured end-of-speech →
-   text time (hover a pill for Gnani's reported processing time too).
-4. Work through the [Gnani verification checklist](#gnani-verification-checklist) below.
+1. `npm run demo-audio` synthesises the Hinglish dealer call with Gnani's own TTS into
+   `demo-audio\me.wav` and `demo-audio\them.wav` (synthetic voices, no personal data).
+2. In Bolo: Context → choose `demo-context`. Settings → Audio → Replay WAV files → **Demo**.
+   Settings → Speech-to-text → **Hindi**. Start, with **Play aloud** on and speed 1×.
+3. Expected: real transcripts for both sides; hover a dot for the measured latency; an
+   answer for each of the three questions (stock, bulk rate, delivery), each from the
+   right file. Two questions close together are answered one after the other.
+4. Note which script English product names come back in ("blue", "exterior emulsion").
+5. Work through the [Gnani verification checklist](#gnani-verification-checklist) below.
 
-## 4. Live microphone ("Me")
+## 4. Your own files
+
+The honest test. Take one real file you would need on a call, remove anything private,
+put it in a folder, and choose that folder in Context. Ask five questions a client really
+asked you. Note every answer that is wrong, labelled "check this figure" when it was
+right, or "not in your files" when the fact was there.
+
+## 5. Live microphone and system audio
 
 1. Windows Settings → Privacy & security → Microphone: allow desktop apps.
-2. Settings → Audio → **Live: mic + system audio**; pick your mic (labels appear after the
-   first capture). Start listening.
-3. Speak Hindi/Hinglish. The **Me** meter moves and lines appear after each pause.
-4. Unplug a USB headset mid-session → a "Microphone stopped" notice appears.
+2. Settings → Audio → **Live: mic + system audio**; pick your mic. Start.
+3. Speak Hindi/Hinglish: lines appear as **Me** after each pause.
+4. Play a Hindi/Hinglish video or join a test call: lines appear as **Them**. No screen
+   picker should appear.
+5. Unplug a USB headset mid-session → a "Microphone stopped" notice appears.
+6. Without headphones, with **Remove speaker echo** on: their words appear once, as Them.
 
-## 5. System audio loopback ("Them")
+## 6. Screen reading
 
-1. Play a Hindi/Hinglish YouTube video, or join a Zoom/Meet/Teams test call.
-2. Start listening. **No screen picker should appear**: the main process answers the
-   capture request with the primary screen plus `audio: 'loopback'`, and the renderer
-   discards the video track straight away.
-3. The **Them** meter moves and lines appear as **Them**.
-4. If you get "Could not capture system audio …", note the exact message (see Troubleshooting).
-5. Check CPU in Task Manager: Bolo's processes together should stay low (a few %)
-   while a call runs.
+1. Settings → AI model → **Vision model**: a model that accepts images on your LLM
+   endpoint (for example `gpt-4o-mini`).
+2. During a call, put a question on screen (an email, a chat message) and press
+   `Ctrl+Alt+Space`. Expected: **Answer · from your screen**, with "read by the AI model,
+   not checked".
+3. The overlay flickers out for a moment during the capture and comes back.
+4. With the Vision model field empty, the hotkey shows "Set a vision model in Settings to
+   use the screen" and sends nothing.
 
-## 6. Echo without headphones
+## 7. Network drops
 
-1. Use laptop speakers, not headphones. Play the other side through the speakers.
-2. With **Remove speaker echo** on: their words appear once, as **Them**, and the
-   "echoed line(s) removed" counter goes up.
-3. Turn it off and repeat: the same words now also show up as **Me**.
-4. Speak over them yourself: your own words must still show as **Me**. If real speech
-   gets dropped, note the example. The threshold (0.6) and window (5 s) are in
-   `src/shared/suggest/echo-dedupe.ts`.
+1. During a live session, turn Wi-Fi off for ~10 s. The dots go amber (hover: "retry in
+   1s", "2s", "4s" …, capped at 15 s).
+2. Turn Wi-Fi on: dots go green, and transcription continues.
+3. Bad key: put a wrong `GNANI_API_KEY` in `.env`, restart → the dots go red with an
+   error on hover, and there are **no** endless retries.
 
-## 7. Suggestions
-
-1. Put a note in Settings → Suggestions → Context, e.g. "I sell term insurance; be concise".
-2. While Zoom or another app has focus, press `Ctrl+Shift+Space`. The suggestion streams
-   into the card within ~1–2 s with a hosted model.
-3. Try each reply language (Same / Hinglish / English).
-4. Auto-suggest: have "them" ask "EMI kitni banegi?". A card appears without the hotkey.
-   Auto suggestions are rate-limited to one every 8 s.
-5. Local model: `ollama pull llama3.2`, set Base URL `http://localhost:11434/v1`, Model
-   `llama3.2`, no key. Expect slower first words on CPU; the RTX 4050 helps if Ollama uses it.
-
-## 8. Network drops
-
-1. During a live session, turn Wi-Fi off for ~10 s.
-2. Pills go amber: "retry 1s", "retry 2s", "retry 4s" … (exponential backoff, capped at 15 s).
-3. Turn Wi-Fi on: pills go green, and transcription continues. About 0.5 s of audio
-   is buffered across the gap; the rest of the gap is dropped (hover a pill to see the count).
-4. Bad key: put a wrong `GNANI_API_KEY` in `.env`, restart → the pills go red with an
-   error, and there are **no** endless retries.
-
-## 9. Silence gate
-
-1. Enable **Silence gate** and start a live session.
-2. Stay silent for 30 s, then speak. Lines must still appear and finish normally. The
-   gate keeps ~1 s of trailing silence so Gnani's VAD can detect the end of an utterance.
-3. If lines never finish, raise the hangover (`DEFAULT_SILENCE_GATE.hangoverFrames` in
-   `src/shared/audio/silence-gate.ts`) or lower the threshold slider.
-
-## 10. Installer (M6)
+## 8. Installer
 
 ```powershell
 npm run dist:win
@@ -147,40 +134,35 @@ npm run dist:win
 
 ## Gnani verification checklist
 
-Every item is a `TODO(verify-gnani)` in `src/core/stt/gnani-protocol.ts`. Check each one
-against https://docs.gnani.ai/api/STT/stt-websocket and a real session:
+Checked with a real key on 2026-10-23 (results in the README,
+[Checked against the real API](../README.md#checked-against-the-real-api)). Re-check if
+Gnani changes the API:
 
-- [ ] **Endpoint**: `wss://api.vachana.ai/stt/v3/stream` works with your key. If your
-      account uses `wss://api.gnani.ai/prisma/v3/stream`, set `GNANI_STT_URL`.
-- [ ] **Handshake**: headers only (`x-api-key-id`, `lang_code`, `x-sample-rate`,
-      `x-api-request-id`). No JSON config/start message is needed after connecting, and
-      the server sends `{"type":"connected"}` first.
-- [ ] **Bad key**: is it rejected with HTTP 401/403 on upgrade, or an `error` message?
-      Either way Bolo should show a red error and stop retrying.
-- [ ] **Partial results**: does the server ever send interim text? Bolo handles
-      `type: "partial"/"interim"` or `is_final: false` if it does. The SDK shows finals only.
-- [ ] **`latency` field**: is it server processing time in ms? (Shown on hover.)
-- [ ] **`segment_index`**: string or number? (Both work.)
-- [ ] **Hinglish**: compare `hi-IN` against the experimental `en-hi-in-cm` (in the SDK up
-      to v0.7.5, removed in v0.7.8) on the same Hinglish clip. Which script does each
-      return for English words (Latin or Devanagari)?
-- [ ] **Auto-detect**: does a comma-separated `lang_code` list (the "Auto-detect" option)
-      still work?
-- [ ] **End of stream**: closing the socket is enough; no flush message is needed to get
-      the last transcript. Bolo waits up to 2 s for an in-flight transcript before closing.
-- [ ] **Silence/keep-alive**: does the server close idle connections? Bolo pings every 15 s.
-- [ ] **TTS demo script**: `npm run demo-audio` uses `/api/v1/tts/inference`, model
-      `timbre-v2.5`, voices `Poorvi` and `Roopesh`.
+- [x] **Endpoint**: `wss://api.vachana.ai/stt/v3/stream` works.
+- [x] **Handshake**: headers only; the server sends `{"type":"connected"}` first.
+- [x] **Bad key**: HTTP 401 on upgrade; red error, no retries.
+- [x] **Partial results**: none (`partials_enabled: false`).
+- [ ] **`latency` field**: a number in ms, but is it server processing time? (Shown on hover.)
+- [x] **`segment_index`**: a number.
+- [x] **Hinglish**: `en-hi-in-cm` is refused; `hi-IN` writes English words in Devanagari.
+- [x] **Auto-detect**: comma lists are refused; `indic-auto` is accepted.
+- [ ] **Auto-detect accuracy**: speak two languages with `indic-auto` and compare with the
+      single-language setting.
+- [x] **End of stream**: closing loses an unfinished sentence; Bolo now sends silence first.
+- [x] **Silence/keep-alive**: the server closes after 60 s without speech, pings or not.
+- [x] **TTS demo script**: `npm run demo-audio` works.
 
 ## Troubleshooting
 
+- **The app exits at once when started from a script or an editor terminal**: the
+  environment has `ELECTRON_RUN_AS_NODE=1` (editors built on Electron set it). Clear it:
+  `Remove-Item Env:ELECTRON_RUN_AS_NODE`.
 - **No system audio / "Could not capture system audio"**: some audio drivers don't
-  support WASAPI loopback. Update the audio driver, check the right output device is the
-  default, or try with a different playback device. Mic-only sessions still work.
-- **Transparent window looks wrong or won't resize**: some GPU drivers struggle with
-  transparent windows. Set `BOLO_OPAQUE_WINDOW=1` in `.env`: the window becomes opaque,
-  and the Overlay opacity slider uses window opacity instead.
+  support WASAPI loopback. Update the driver, check the default output device, or try
+  another playback device. Mic-only sessions still work.
+- **Transparent window looks wrong**: set `BOLO_OPAQUE_WINDOW=1` in `.env`.
 - **A hotkey does nothing**: another app may own it; Bolo shows a notice at startup if
   registration failed. Change `HOTKEYS` in `src/main/index.ts`.
+- **A CSV is listed as "not UTF-8"**: in Excel use Save As → **CSV UTF-8**.
 - **"GNANI_API_KEY is not set"**: `.env` must be in the folder you run `npm run dev`
   from, or in `%APPDATA%\Bolo\` for the installed app. Restart Bolo after editing it.

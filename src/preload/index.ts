@@ -11,6 +11,11 @@ const api: BoloApi = {
   chooseExportDir: () => ipcRenderer.invoke(IPC.chooseExportDir),
   openExportDir: () => ipcRenderer.send(IPC.openExportDir),
   readDemoAudio: () => ipcRenderer.invoke(IPC.readDemoAudio),
+  chooseContextDir: () => ipcRenderer.invoke(IPC.chooseContextDir),
+  reloadContext: () => ipcRenderer.invoke(IPC.reloadContext),
+  ask: (text, withScreen) => ipcRenderer.send(IPC.ask, text, withScreen),
+  askScreen: () => ipcRenderer.send(IPC.askScreen),
+  requestMeaning: (id) => ipcRenderer.send(IPC.requestMeaning, id),
   window: (cmd) => ipcRenderer.send(IPC.window, cmd),
   openAudioPort: (speaker) => {
     // MessagePorts can't cross contextBridge, so: one end to main over IPC, the

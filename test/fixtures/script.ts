@@ -5,14 +5,20 @@
 import type { ScriptLine } from '../mock/mock-gnani-server.ts';
 
 export const THEM_LINES = {
-  greeting: { freqHz: 310, text: 'Hello, haan ji, aapne term insurance ke liye call kiya tha.' },
-  question: { freqHz: 420, text: 'Achha, premium kitna hoga monthly, aur tax benefit milega?' },
-  closing: { freqHz: 530, text: 'Theek hai, brochure WhatsApp pe bhej dijiye.' },
+  greeting: {
+    freqHz: 310,
+    text: 'Hello, Mehta Hardware se bol raha hoon, order ke baare mein baat karni thi.',
+  },
+  question: {
+    freqHz: 420,
+    text: 'Achha, blue wala 5 litre ka kitna stock pada hai, aur thok mein kya rate lagega?',
+  },
+  closing: { freqHz: 530, text: 'Theek hai, quotation WhatsApp pe bhej dijiye.' },
 } satisfies Record<string, ScriptLine>;
 
 export const ME_LINES = {
-  intro: { freqHz: 640, text: 'Ji, main Rohan bol raha hoon, Suraksha Life se.' },
-  answer: { freqHz: 750, text: 'Bilkul, main abhi details share karta hoon.' },
+  intro: { freqHz: 640, text: 'Ji namaste Mehta ji, Rohan here, bataiye.' },
+  answer: { freqHz: 750, text: 'Bilkul, main abhi check karke batata hoon.' },
 } satisfies Record<string, ScriptLine>;
 
 export const SCRIPT: ScriptLine[] = [...Object.values(THEM_LINES), ...Object.values(ME_LINES)];

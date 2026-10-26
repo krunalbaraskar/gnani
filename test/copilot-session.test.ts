@@ -51,6 +51,7 @@ describe('CopilotSession with fixtures and mock servers', () => {
       ...DEFAULT_SETTINGS,
       contextNote: 'Selling term insurance',
       autoSuggest: true,
+      explainThem: false, // meanings share the mock LLM; this test is about the suggestion
     };
     const { log, events } = recordEvents();
     const session = new CopilotSession({
@@ -93,6 +94,8 @@ describe('CopilotSession with fixtures and mock servers', () => {
       THEM_LINES.closing.text,
     ]);
     expect(record.echoesRemoved).toBe(1);
+    // The overlay counts echoes from these events, so it must agree with the export.
+    expect(log.filter((e) => e.type === 'removed')).toHaveLength(1);
 
     // Exactly one auto suggestion, for the question, containing the context note.
     expect(record.suggestions).toHaveLength(1);

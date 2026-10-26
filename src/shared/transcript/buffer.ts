@@ -33,6 +33,12 @@ export class TranscriptBuffer {
     return this.segments.splice(i, 1)[0];
   }
 
+  setMeaning(id: string, meaning: string): boolean {
+    const seg = this.segments.find((s) => s.id === id);
+    if (seg) seg.meaning = meaning;
+    return !!seg;
+  }
+
   /** Segments received in the last `minutes`, oldest first. */
   getRecent(minutes: number, now: number = Date.now()): TranscriptSegment[] {
     const since = now - minutes * 60_000;

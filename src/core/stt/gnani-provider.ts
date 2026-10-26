@@ -9,7 +9,9 @@ import {
   GNANI_DEFAULT_STT_URL,
   GNANI_FATAL_HTTP_STATUSES,
   GNANI_FRAME_BYTES,
+  GNANI_FRAME_MS,
   GNANI_NORMAL_CLOSE_CODE,
+  GNANI_POLICY_CLOSE_CODE,
   isFatalGnaniError,
   makeRequestId,
   parseGnaniMessage,
@@ -30,7 +32,7 @@ export interface GnaniProviderOptions {
   maxReconnectAttempts?: number;
   /** Ping interval used to detect dead connections. */
   heartbeatMs?: number;
-  /** How long close() waits for a transcript the server is still processing. */
+  /** How long close() keeps sending silence while waiting for the last transcript. */
   closeGraceMs?: number;
   /** Frames kept while (re)connecting and sent once connected (~0.5 s). */
   preConnectFrames?: number;
@@ -73,7 +75,7 @@ export class GnaniStream implements SttStream {
   private pending: Uint8Array[] = [];
   private dropped = 0;
   private lastVoicedAt = 0;
-  private inFlight = 0; // utterances the server is transcribing
+  private inFlight = 0; // utterances the server heard start but hasn't finalized
   private inFlightWaiters: (() => void)[] = [];
   private readonly now: () => number;
   private readonly log: Logger;
@@ -115,6 +117,7 @@ export class GnaniStream implements SttStream {
     const ws = new WebSocket(url, { headers, handshakeTimeout: GNANI_CONNECT_TIMEOUT_MS });
     this.ws = ws;
     let gotConnected = false;
+    let lastError = '';
 
     ws.on('unexpected-response', (_req, res) => {
       const status = res.statusCode ?? 0;
@@ -141,7 +144,6 @@ export class GnaniStream implements SttStream {
           this.onConnected();
           break;
         case 'processing':
-          this.inFlight++;
           this.cb.onProcessing?.(this.speaker);
           break;
         case 'transcript': {
@@ -163,6 +165,7 @@ export class GnaniStream implements SttStream {
         }
         case 'error': {
           this.log.warn('stt server error', { speaker: this.speaker, message: event.message });
+          lastError = event.message;
           const fatal = !gotConnected && isFatalGnaniError(event.message);
           if (fatal) {
             this.fail(event.message, true);
@@ -173,6 +176,8 @@ export class GnaniStream implements SttStream {
           break;
         }
         case 'vad':
+          // The live server sends speech_start, then one final transcript per utterance.
+          if (event.event === 'speech_start' || event.event === 'vad_start') this.inFlight++;
           break;
         case 'unknown':
           this.log.warn('stt unknown message', { speaker: this.speaker, type: event.type });
@@ -198,6 +203,11 @@ export class GnaniStream implements SttStream {
         if (this.state !== 'error') this.setState('closed');
         return;
       }
+      if (code === GNANI_POLICY_CLOSE_CODE) {
+        // The server refused this configuration (e.g. a language it doesn't support).
+        this.fail(lastError || `Server refused the stream (close ${code})`, true);
+        return;
+      }
       this.log.warn('stt connection closed', { speaker: this.speaker, code });
       this.scheduleReconnect();
     });
@@ -210,12 +220,14 @@ export class GnaniStream implements SttStream {
     }
     if (frameLevelDb(frame) >= (this.opts.voicedThresholdDb ?? -50)) this.lastVoicedAt = this.now();
     const ws = this.ws;
-    if (this.state === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(frame);
-      return;
-    }
     // Keep a short tail while connecting so the first words aren't lost.
     this.pending.push(frame);
+    if (this.state === 'connected' && ws && ws.readyState === WebSocket.OPEN) {
+      // That tail goes out two frames per new frame, not as one burst: Gnani's VAD
+      // wants real-time cadence.
+      for (let i = 0; i < 2 && this.pending.length; i++) ws.send(this.pending.shift()!);
+      return;
+    }
     const max = this.opts.preConnectFrames ?? 16;
     while (this.pending.length > max) {
       this.pending.shift();
@@ -225,17 +237,12 @@ export class GnaniStream implements SttStream {
 
   async close(): Promise<void> {
     if (this.closing) return;
-    // Let an utterance that's already being transcribed come back first.
-    if (this.inFlight > 0 && this.state === 'connected') {
-      await new Promise<void>((resolve) => {
-        const t = setTimeout(resolve, this.opts.closeGraceMs ?? 2000);
-        this.inFlightWaiters.push(() => {
-          clearTimeout(t);
-          resolve();
-        });
-      });
-    }
     this.closing = true;
+    // The server only finalizes an utterance after hearing trailing silence: closing
+    // mid-sentence, or just waiting, loses the last line. So feed it silence until then.
+    if (this.inFlight > 0 && this.state === 'connected') {
+      await this.flushWithSilence(this.opts.closeGraceMs ?? 3000);
+    }
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     const ws = this.ws;
@@ -262,10 +269,24 @@ export class GnaniStream implements SttStream {
     this.connectTimer = null;
     this.attempt = 0;
     this.setState('connected');
-    const ws = this.ws;
-    if (ws) for (const f of this.pending) ws.send(f);
-    this.pending = [];
     this.startHeartbeat();
+  }
+
+  /** Sends what's queued, then silence, at real-time pace until in-flight lines are final. */
+  private flushWithSilence(maxMs: number): Promise<void> {
+    const silence = new Uint8Array(GNANI_FRAME_BYTES);
+    return new Promise((resolve) => {
+      const tick = setInterval(() => {
+        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(this.pending.shift() ?? silence);
+      }, GNANI_FRAME_MS);
+      const done = () => {
+        clearInterval(tick);
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, maxMs);
+      this.inFlightWaiters.push(done);
+    });
   }
 
   private startHeartbeat(): void {

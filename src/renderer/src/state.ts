@@ -11,6 +11,8 @@ export interface Notice {
   message: string;
 }
 
+export type Tab = 'live' | 'transcript' | 'context' | 'settings';
+
 export interface UiState {
   app: AppState | null;
   running: boolean;
@@ -26,7 +28,10 @@ export interface UiState {
   clickThrough: boolean;
   echoesRemoved: number;
   notice: Notice | null;
-  panel: 'live' | 'settings';
+  /** Which tab the panel shows. */
+  panel: Tab;
+  /** Whether the panel under the bar is expanded. */
+  open: boolean;
 }
 
 export type UiAction =
@@ -39,7 +44,8 @@ export type UiAction =
   | { type: 'level'; speaker: Speaker; level: number }
   | { type: 'notice'; level: 'info' | 'error'; message: string }
   | { type: 'dismiss-notice' }
-  | { type: 'panel'; panel: 'live' | 'settings' }
+  | { type: 'panel'; panel: Tab }
+  | { type: 'toggle-open' }
   | { type: 'clear-transcript' };
 
 const idle = (speaker: Speaker): SttStatusView => ({ speaker, state: 'idle' });
@@ -60,6 +66,7 @@ export const initialUiState: UiState = {
   echoesRemoved: 0,
   notice: null,
   panel: 'live',
+  open: false,
 };
 
 let noticeId = 0;
@@ -74,6 +81,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
         clickThrough: action.app.clickThrough,
         // First run: show settings so the consent notice and keys are seen.
         panel: action.app.settings.consentAcknowledged ? state.panel : 'settings',
+        open: action.app.settings.consentAcknowledged ? state.open : true,
       };
     case 'settings':
       return state.app ? { ...state, app: { ...state.app, settings: action.settings } } : state;
@@ -106,7 +114,9 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
     case 'dismiss-notice':
       return { ...state, notice: null };
     case 'panel':
-      return { ...state, panel: action.panel };
+      return { ...state, panel: action.panel, open: true };
+    case 'toggle-open':
+      return { ...state, open: !state.open };
     case 'clear-transcript':
       return { ...state, segments: [], suggestion: null };
     case 'event':
@@ -131,6 +141,13 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
         processing: { ...state.processing, [s.speaker]: false },
       };
     }
+    case 'segment-meaning':
+      return {
+        ...state,
+        segments: state.segments.map((s) => (s.id === e.id ? { ...s, meaning: e.meaning } : s)),
+      };
+    case 'context':
+      return state.app ? { ...state, app: { ...state.app, context: e.context } } : state;
     case 'segment-removed':
       return {
         ...state,
@@ -156,7 +173,15 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
       return { ...state, stt: { ...state.stt, [e.status.speaker]: status } };
     }
     case 'suggestion-start':
-      return { ...state, suggestion: e.suggestion };
+      // An answer is the reason the panel exists: bring it into view. One the user did not
+      // ask for leaves them in Context or Settings.
+      return {
+        ...state,
+        suggestion: e.suggestion,
+        open: true,
+        panel:
+          e.suggestion.trigger === 'auto' && state.panel !== 'transcript' ? state.panel : 'live',
+      };
     case 'suggestion-token':
       return state.suggestion?.id === e.id
         ? { ...state, suggestion: { ...state.suggestion, text: e.text } }
@@ -172,6 +197,8 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
         ...state,
         running: e.running,
         starting: false,
+        open: e.running ? true : state.open,
+        panel: e.running ? 'live' : state.panel,
         processing: { me: false, them: false },
         stt: e.running ? state.stt : { me: idle('me'), them: idle('them') },
         app: state.app ? { ...state.app, sessionRunning: e.running } : state.app,

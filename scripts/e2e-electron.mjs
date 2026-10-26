@@ -7,12 +7,14 @@
  *   node scripts/e2e-electron.mjs          # Linux CI: xvfb-run -a node scripts/e2e-electron.mjs
  *
  * It uses a throwaway settings/userData folder, so it never touches your real settings.
+ * BOLO_RECORDABLE=1 is set so the screenshots can see the overlay.
  */
 import { _electron as electron } from 'playwright';
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
+import { demoReply } from '../test/mock/demo-brain.ts';
 import { MockGnaniServer } from '../test/mock/mock-gnani-server.ts';
 import { MockLlmServer } from '../test/mock/mock-llm-server.ts';
 import { SCRIPT, THEM_LINES, ME_LINES } from '../test/fixtures/script.ts';
@@ -21,6 +23,7 @@ const repo = join(import.meta.dirname, '..');
 const electronPath = createRequire(import.meta.url)('electron');
 const home = mkdtempSync(join(tmpdir(), 'bolo-e2e-'));
 const exportDir = join(home, 'exports');
+const contextDir = join(repo, 'demo-context');
 const shots = join(repo, 'test-results', 'e2e');
 mkdirSync(shots, { recursive: true });
 
@@ -31,20 +34,27 @@ writeFileSync(
   join(appData, 'Bolo', 'settings.json'),
   JSON.stringify({
     audioMode: 'file',
-    replaySpeed: 2,
+    replaySpeed: 0.5, // slow enough to ask questions before the replay ends
     replayAudible: false,
     exportDir,
-    contextNote: 'Selling term insurance',
+    contextDir,
+    contextNote: 'I sell paint to dealers',
+    llmVisionModel: 'mock-vision',
   }),
 );
 
 const gnani = new MockGnaniServer({ script: SCRIPT });
-const llm = new MockLlmServer({
-  tokens: ['Premium', ' around ₹1,200', ' monthly hai.'],
-  tokenDelayMs: 20,
-});
+const llm = new MockLlmServer({ reply: demoReply, tokenDelayMs: 15 });
 const sttUrl = await gnani.start();
 const llmUrl = await llm.start();
+const userText = (r) => {
+  const c = r.body.messages.at(-1).content;
+  return typeof c === 'string' ? c : c.map((p) => p.text ?? '').join('\n');
+};
+const hasImage = (r) =>
+  r.body.messages.some(
+    (m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'),
+  );
 
 const app = await electron.launch({
   executablePath: electronPath,
@@ -55,36 +65,45 @@ const app = await electron.launch({
   cwd: home, // so the repo's real .env is not picked up
   env: {
     ...process.env,
-    XDG_CONFIG_HOME: appData, // Linux
-    APPDATA: appData, // Windows
+    // Set by editors that are themselves Electron apps; it would run our app as plain Node.
+    ELECTRON_RUN_AS_NODE: undefined,
+    BOLO_USER_DATA: join(appData, 'Bolo'),
     GNANI_API_KEY: 'test-key',
     GNANI_STT_URL: sttUrl,
     LLM_BASE_URL: llmUrl,
     LLM_MODEL: 'mock-model',
     LLM_API_KEY: '',
+    BOLO_RECORDABLE: '1',
   },
 });
 
 const failures = [];
+let page;
 const check = (ok, msg) =>
   ok ? console.info('  ✓', msg) : (failures.push(msg), console.error('  ✗', msg));
 try {
-  const page = await app.firstWindow();
+  page = await app.firstWindow();
   const logs = [];
   page.on('console', (m) => logs.push(`${m.type()}: ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
+  const shot = (name) => page.screenshot({ path: join(shots, `${name}.png`) });
+  const bounds = () =>
+    app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
 
-  const win = await app.evaluate(({ BrowserWindow }) => {
+  const win = await app.evaluate(({ BrowserWindow, screen }) => {
     const w = BrowserWindow.getAllWindows()[0];
     return {
       alwaysOnTop: w.isAlwaysOnTop(),
-      resizable: w.isResizable(),
-      frameless: !w.isMenuBarVisible(),
+      bounds: w.getBounds(),
+      workArea: screen.getPrimaryDisplay().workArea,
     };
   });
+  check(win.alwaysOnTop, 'overlay is always on top');
+  const centre = win.bounds.x + win.bounds.width / 2;
+  const screenCentre = win.workArea.x + win.workArea.width / 2;
   check(
-    win.alwaysOnTop && win.resizable,
-    `overlay is always-on-top and resizable ${JSON.stringify(win)}`,
+    win.bounds.width === 620 && Math.abs(centre - screenCentre) <= 1,
+    `overlay is a 620 px bar centred at the top ${JSON.stringify(win.bounds)}`,
   );
   const isolated = await page.evaluate(
     () => typeof window.require === 'undefined' && typeof window.process === 'undefined',
@@ -92,11 +111,49 @@ try {
   check(isolated, 'renderer has no Node access (contextIsolation, no nodeIntegration)');
 
   const after = await page.evaluate(() =>
-    window.bolo.updateSettings({ exportDir: '/somewhere/else' }),
+    window.bolo.updateSettings({ exportDir: '/somewhere/else', contextDir: '/etc' }),
   );
-  check(after.exportDir === exportDir, 'renderer cannot change the export folder');
+  check(
+    after.exportDir === exportDir && after.contextDir === contextDir,
+    'renderer cannot change the export or context folder',
+  );
+
+  // First run: consent, then the window shrinks back to what is open.
+  await page.getByText('Before you record a call').waitFor();
+  await shot('1-consent');
   await page.getByRole('button', { name: /I understand/ }).click();
-  await page.getByTitle('Back to transcript').click();
+  await page.getByText('Keys (from .env').waitFor();
+  await page.getByRole('img', { name: 'Visible in recordings (demo mode)' }).waitFor();
+  check(true, 'demo mode is announced while content protection is off');
+
+  // Context tab lists the demo files; contents never reach the renderer.
+  await page.getByRole('tab', { name: 'Context' }).click();
+  await page.getByText('inventory.csv').waitFor();
+  await page.getByText('10 rows').waitFor();
+  await shot('2-context');
+  const state = await page.evaluate(() => window.bolo.getState());
+  check(
+    state.context.files.length === 3 && !JSON.stringify(state).includes('SP-EX-BL-5'),
+    'three context files loaded; file contents stay in the main process',
+  );
+
+  // Collapsed bar: the window is only as tall as the bar.
+  await page.getByTitle('Collapse').click();
+  await page.waitForTimeout(300);
+  await shot('3-bar');
+  check(
+    (await bounds()).height === 44,
+    `collapsed window is only as tall as the bar (${(await bounds()).height})`,
+  );
+
+  // Replay files live under Settings → Audio.
+  await page
+    .getByRole('tab', { name: 'Settings' })
+    .click()
+    .catch(async () => {
+      await page.getByTitle('Expand').click();
+      await page.getByRole('tab', { name: 'Settings' }).click();
+    });
   await page
     .locator('input[type=file]')
     .nth(0)
@@ -105,36 +162,73 @@ try {
     .locator('input[type=file]')
     .nth(1)
     .setInputFiles(join(repo, 'test', 'fixtures', 'me.wav'));
-  await page.getByRole('button', { name: /Start replay/ }).click();
-  await page.getByText('Listening').first().waitFor({ timeout: 5000 });
-  check(true, 'session started and Listening indicator shown');
+  await page.getByRole('button', { name: 'Start' }).click();
+  await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
+  check(true, 'session started; the panel switched to Live');
 
+  // The client's question, its meaning, and an answer grounded in the files.
+  await page.getByText(/142 units Pune godown/).waitFor({ timeout: 25000 });
+  await page.getByText('Answer · from your files').waitFor({ timeout: 5000 });
+  await page.locator('.answer .chip', { hasText: 'inventory.csv' }).waitFor();
+  await page.locator('.answer .chip', { hasText: 'price-list.md' }).waitFor();
+  check(true, 'grounded answer shown with both source files');
+  await page
+    .getByText(/How much stock of the blue 5-litre/)
+    .first()
+    .waitFor({ timeout: 8000 });
+  check(true, 'meaning shown under the mixed-language line');
+  await shot('4-live-answer');
+  const answerReq = llm.requests.find((r) => userText(r).includes('Them just asked'));
+  check(
+    userText(answerReq).includes('--- inventory.csv ---') &&
+      userText(answerReq).includes('I sell paint to dealers'),
+    'file chunks and the note about me were sent with the answer request',
+  );
+  check((await bounds()).height > 150, 'window grew to fit the panel');
+
+  // A typed question, answered from the project notes.
+  await page.getByLabel('Ask Bolo').fill('what did we promise on delivery?');
+  await page.getByLabel('Ask Bolo').press('Enter');
+  await page.getByText(/Delivery within 7 working days/).waitFor({ timeout: 8000 });
+  await page.getByText('You asked: what did we promise on delivery?').waitFor();
+  await page.locator('.answer .chip', { hasText: 'project-notes.md' }).waitFor();
+  check(true, 'typed question answered from project-notes.md');
+  await shot('5-typed-question');
+
+  // A question the files cannot answer.
+  await page.getByLabel('Ask Bolo').fill('what is their GST number?');
+  await page.getByLabel('Ask Bolo').press('Enter');
+  await page.getByText('Answer · not in your files').waitFor({ timeout: 8000 });
+  check(true, 'honest "not in your files" card');
+  await shot('6-not-in-files');
+
+  // Screen question: the main process captures; the image goes only to the model.
+  await page.evaluate(() => window.bolo.askScreen());
+  await page.getByText('Answer · from your screen').waitFor({ timeout: 10000 });
+  await page.locator('.answer pre.code', { hasText: 'def most_stocked' }).waitFor();
+  check(true, 'screen answer shows its code as a code block');
+  const screenReq = llm.requests.find(hasImage);
+  check(
+    !!screenReq && screenReq.body.model === 'mock-vision',
+    'screenshot sent to the vision model',
+  );
+  check(
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getOpacity() === 1),
+    'overlay is visible again after the capture',
+  );
+  await shot('7-screen-answer');
+
+  await page.getByRole('tab', { name: 'Transcript' }).click();
   await page.getByText(THEM_LINES.closing.text).waitFor({ timeout: 15000 });
   await page.getByText(ME_LINES.answer.text).waitFor({ timeout: 15000 });
-  await page.screenshot({ path: join(shots, 'e2e-live.png') });
   const lines = await page
     .locator('.transcript .line:not(.pending)')
-    .evaluateAll((els) =>
-      els.map(
-        (e) => `${e.querySelector('.who').textContent}: ${e.querySelector('.text').textContent}`,
-      ),
-    );
-  console.info('  transcript:', lines);
-  check(lines.filter((l) => l.startsWith('Them')).length === 3, 'three Them lines');
-  check(lines.filter((l) => l.startsWith('Me')).length === 2, 'two Me lines (echo removed)');
-  await page.getByText('Premium around ₹1,200 monthly hai.').waitFor({ timeout: 10000 });
-  check(true, 'auto-suggestion streamed into the overlay');
-  check(
-    llm.requests[0]?.body.messages[1]?.content.includes('Selling term insurance'),
-    'context note sent to the LLM',
-  );
+    .evaluateAll((els) => els.map((e) => e.querySelector('.who').textContent));
+  check(lines.filter((l) => l === 'Them').length === 3, 'three Them lines');
+  check(lines.filter((l) => l === 'Me').length === 2, 'two Me lines (echo removed)');
+  await shot('8-transcript');
 
-  // Hotkey path, via the same IPC the global shortcut uses.
-  await page.evaluate(() => window.bolo.requestSuggestion());
-  await page.waitForTimeout(500);
-  check(llm.requests.length >= 2, 'manual suggestion request reached the LLM');
-
-  await page.getByText(/^Saved /).waitFor({ timeout: 15000 });
+  await page.getByText(/^Saved /).waitFor({ timeout: 20000 });
   const files = readdirSync(exportDir);
   console.info('  exported:', files);
   const md = files.find((f) => f.endsWith('.md'));
@@ -144,13 +238,14 @@ try {
     const text = readFileSync(join(exportDir, md), 'utf8');
     writeFileSync(join(shots, 'export.md'), text);
     check(text.includes(THEM_LINES.question.text), 'export contains the transcript');
+    check(text.includes('(from inventory.csv, price-list.md)'), 'export names the answer sources');
+    check(text.includes('_Meaning: How much stock'), 'export contains the meaning line');
   }
-  if (json)
-    check(
-      JSON.parse(readFileSync(join(exportDir, json), 'utf8')).echoesRemoved === 1,
-      'export records the removed echo',
-    );
-  await page.screenshot({ path: join(shots, 'e2e-done.png') });
+  if (json) {
+    const saved = readFileSync(join(exportDir, json), 'utf8');
+    check(JSON.parse(saved).echoesRemoved === 1, 'export records the removed echo');
+    check(!saved.includes('data:image'), 'no screenshot in the export');
+  }
   check(
     gnani.connections.every((c) => c.badFrames === 0) && gnani.connections.length >= 2,
     'mock Gnani got only 1024-byte frames on 2 streams',
@@ -162,6 +257,18 @@ try {
   check(!(await page.content()).includes('test-key'), 'API key never appears in the renderer');
   const errs = logs.filter((l) => l.startsWith('error') || l.startsWith('pageerror'));
   check(errs.length === 0, `no renderer errors ${errs.length ? JSON.stringify(errs) : ''}`);
+} catch (err) {
+  // Leave evidence behind: what the overlay showed and what the model was asked.
+  await page?.screenshot({ path: join(shots, 'failure.png') }).catch(() => {});
+  console.error(
+    '  LLM requests:',
+    llm.requests.map((r) => userText(r).slice(-160)),
+  );
+  console.error(
+    '  transcripts:',
+    gnani.connections.map((c) => c.transcripts),
+  );
+  throw err;
 } finally {
   await app.close();
   await gnani.stop();

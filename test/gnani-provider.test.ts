@@ -65,7 +65,10 @@ describe('GnaniSttProvider against the mock server', () => {
 
     await stream.close();
     expect(c.states().at(-1)).toBe('closed');
-    expect(server.connections[0]!.closeCode).toBe(1000);
+    // The client's close can resolve before the server's own 'close' event fires (Windows).
+    const conn = server.connections[0]!;
+    await waitFor(() => conn.closeCode !== undefined, 2000, 'server close');
+    expect(conn.closeCode).toBe(1000);
   });
 
   it('rejects frames that are not 1024 bytes', async () => {
@@ -93,6 +96,43 @@ describe('GnaniSttProvider against the mock server', () => {
     expect(c.statuses.find((s) => s.state === 'error')?.error).toMatch(/401/);
     await new Promise((r) => setTimeout(r, 100));
     expect(c.states()).not.toContain('reconnecting');
+    await stream.close();
+  });
+
+  it('stops on a language the server refuses (close 1008) instead of retrying', async () => {
+    server = new MockGnaniServer({ languages: ['hi-IN'] });
+    const url = await server.start();
+    const c = collector();
+    const stream = new GnaniSttProvider({
+      apiKey: 'test-key',
+      url,
+      backoff: { baseMs: 10 },
+    }).openStream('me', { language: 'en-hi-in-cm' }, c.cb);
+    await waitFor(() => c.states().includes('error'), 3000, 'error');
+    expect(c.statuses.at(-1)?.error).toMatch(/does not support languages/);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(server.connections).toHaveLength(1);
+    expect(c.states()).not.toContain('reconnecting');
+    await stream.close();
+  });
+
+  it('sends audio queued while connecting two frames at a time, not as a burst', async () => {
+    server = new MockGnaniServer();
+    const url = await server.start();
+    const c = collector();
+    const stream = new GnaniSttProvider({ apiKey: 'test-key', url }).openStream(
+      'them',
+      { language: 'hi-IN' },
+      c.cb,
+    );
+    for (let i = 0; i < 10; i++) stream.send(silence());
+    await waitFor(() => c.states().includes('connected'), 3000, 'connected');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(server.connections[0]!.frames).toBe(0);
+    stream.send(silence());
+    await waitFor(() => server!.connections[0]!.frames === 2, 1000, 'two frames');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(server.connections[0]!.frames).toBe(2);
     await stream.close();
   });
 
@@ -171,6 +211,24 @@ describe('GnaniSttProvider against the mock server', () => {
     await new Promise((r) => setTimeout(r, 60));
     await stream.close();
     expect(c.transcripts.map((t) => t.text)).toEqual(['last words']);
+  });
+
+  it('close() mid-sentence sends silence so the server still finalizes the line', async () => {
+    server = new MockGnaniServer({ script: [{ freqHz: 400, text: 'cut off' }] });
+    const url = await server.start();
+    const c = collector();
+    const stream = new GnaniSttProvider({ apiKey: 'test-key', url }).openStream(
+      'me',
+      { language: 'hi-IN' },
+      c.cb,
+    );
+    await waitFor(() => c.states().includes('connected'), 3000, 'connected');
+    // Speech with no trailing silence: like pressing Stop while someone is talking.
+    for (let i = 0; i < 20; i++) stream.send(tone(400));
+    await new Promise((r) => setTimeout(r, 100)); // speech_start has arrived
+    await stream.close();
+    expect(c.transcripts.map((t) => t.text)).toEqual(['cut off']);
+    expect(c.states().at(-1)).toBe('closed');
   });
 
   it('surfaces partial transcripts as non-final', async () => {

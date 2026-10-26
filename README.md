@@ -1,25 +1,40 @@
-# Bolo — real-time AI copilot for Indian-language calls
+# Bolo — the call copilot that knows your stuff
 
-Bolo is a small Windows desktop app that sits on top of your Zoom, Meet or Teams call.
-It transcribes **both sides** of the conversation live with **Gnani's speech-to-text**,
-which handles Hindi, Tamil and other Indian languages and code-mixed speech like
-Hinglish. It shows short reply suggestions you can say out loud, in a discreet overlay
-that is hidden from screen sharing.
+A client asks "how much stock do you have of the blue 5 litre, and what's the bulk rate?"
+A couple of seconds later the exact figure from **your own files** is on your screen, with
+the file it came from, in a glass bar that **does not appear in your screen share**.
+
+Bolo is a small Windows desktop app that sits on top of your Zoom, Meet or Teams call. It
+transcribes **both sides** of the conversation live with **Gnani's speech-to-text**, which
+handles Hindi, Tamil and other Indian languages and code-mixed speech like Hinglish. Then
+it does four things:
+
+- **Answers from your files.** Point it at a folder with your stock sheet, price list or
+  project notes. When they ask a question, Bolo answers from those files and names the
+  file. If the fact is not there, it says so; it does not make up a number.
+- **Stays out of the screen share.** The overlay is excluded from screen capture, so the
+  people you are sharing with do not see it.
+- **Explains mixed-language lines.** Under a line that mixes in words you may not know,
+  it shows the plain meaning in the language you read.
+- **Reads your screen when you ask.** One hotkey sends a picture of your screen with your
+  question. Never in the background.
 
 Built for sales reps, small business owners, brokers and agents who take calls in Indian
 languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 
-<p align="center"><img src="docs/overlay.png" width="380" alt="Bolo overlay: live Hinglish transcript with a suggested reply"></p>
+<p align="center"><img src="docs/overlay.png" width="620" alt="Bolo overlay during a call: the client's Hinglish question, its meaning in English, and an answer taken from inventory.csv and price-list.md"></p>
 
-<sub>Screenshot from the automated UI test, with synthetic conversation data.</sub>
+<sub>Screenshot from the automated end-to-end test on Windows, with synthetic data.</sub>
 
 ## Contents
 
 - [Status](#status)
 - [Quick start (Windows)](#quick-start-windows)
+- [Try it with no keys](#try-it-with-no-keys)
+- [Try it free, without a Gnani key](#try-it-free-without-a-gnani-key)
 - [Environment variables](#environment-variables)
-- [File-replay mode](#file-replay-mode-no-microphone-needed)
 - [Using Bolo](#using-bolo)
+- [How answers are kept honest](#how-answers-are-kept-honest)
 - [Architecture](#architecture)
 - [Gnani integration and what to verify](#gnani-integration-and-what-to-verify)
 - [Suggestion models](#suggestion-models)
@@ -31,17 +46,23 @@ languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 
 ## Status
 
-| Area                                                                           | State                                                                                                                                  |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Audio pipeline (resample → PCM16 → 1024-byte frames, silence gate, WAV replay) | Done, unit-tested                                                                                                                      |
-| Gnani realtime STT client (reconnect, heartbeat, latency)                      | Done, tested against a mock server. **Not yet run against the real API** — see [what to verify](#gnani-integration-and-what-to-verify) |
-| Transcript buffer, echo dedupe, question detector                              | Done, unit-tested                                                                                                                      |
-| LLM client (OpenAI-compatible, streaming), prompt, suggestion engine           | Done, tested against a mock server                                                                                                     |
-| Electron overlay, IPC, hotkeys, settings, export                               | Done. Real Electron end-to-end test passes on Linux/Xvfb with mock servers                                                             |
-| Live mic + system-audio loopback (Windows)                                     | Written. Mic → AudioWorklet path checked in Chromium with a fake mic; **loopback untested on Windows**                                 |
-| Windows installer (NSIS)                                                       | Config done; `--win --dir` packaging checked. Build the `.exe` on Windows                                                              |
+Checked on Windows 11 (build 26100) on 2026-10-09.
 
-Manual test plan for your laptop: [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md).
+| Area                                                              | State                                                                                                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Audio pipeline, transcript, echo removal, question detection      | Done, unit-tested                                                                                                                              |
+| Context files: loading, chunking, selection                       | Done, unit-tested                                                                                                                              |
+| Answers: source parsing, number check, labels, trigger precedence | Done, unit-tested                                                                                                                              |
+| Meaning line for mixed-language speech                            | Done, unit-tested                                                                                                                              |
+| The whole app end to end (Electron, real windows)                 | **Passes on Windows** against the mock Gnani and mock AI servers: 28 checks, `npm run test:e2e`                                                |
+| Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                 |
+| Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share              |
+| Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                             |
+| Gnani realtime STT client                                         | **Run against the real API** (2026-10-23), alone and in the full app with real answers — see [what was checked](#checked-against-the-real-api) |
+| Windows installer (NSIS)                                          | Config done; build the `.exe` with `npm run dist:win`                                                                                          |
+
+Manual test plan: [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md). Design record:
+[docs/designs/bolo-context-copilot.md](docs/designs/bolo-context-copilot.md).
 
 ## Quick start (Windows)
 
@@ -54,19 +75,95 @@ copy .env.example .env      # then fill in GNANI_API_KEY and the LLM_* values
 npm run dev
 ```
 
-On first launch Bolo shows a consent notice. Then pick **Live** (mic + system audio) or
-**Replay WAV files** in Settings and press **▶ Start**.
+If the app does not start and says Electron failed to install, your npm is set to skip
+install scripts. Run `node node_modules/electron/install.js` once.
 
-| Script                                | What it does                                                                            |
-| ------------------------------------- | --------------------------------------------------------------------------------------- |
-| `npm run dev`                         | Run the app with hot reload                                                             |
-| `npm run build`                       | Build main, preload and renderer into `out/`                                            |
-| `npm run lint` / `typecheck` / `test` | ESLint, TypeScript (node, preload, web), Vitest                                         |
-| `npm run mock-gnani`                  | Local mock of Gnani's STT WebSocket, for offline runs                                   |
-| `npm run demo-audio`                  | Synthesise a fictional Hinglish demo call with Gnani TTS                                |
-| `npm run fixtures`                    | Regenerate the synthetic test WAVs                                                      |
-| `npm run dist:win`                    | Build the Windows installer (run on Windows)                                            |
-| `npm run test:ui` / `test:e2e`        | Optional browser / Electron end-to-end tests (need Playwright, see [Testing](#testing)) |
+Bolo appears as a slim bar at the top-centre of the screen. On first launch it shows a
+consent notice. Then:
+
+1. Open **Context**, choose the folder with your files.
+2. Open **Settings → Audio**, pick **Live** (mic + system audio) or **Replay WAV files**.
+3. Press **Start**.
+
+| Script                                | What it does                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`                         | Run the app with hot reload                                                          |
+| `npm run build`                       | Build main, preload and renderer into `out/`                                         |
+| `npm run lint` / `typecheck` / `test` | ESLint, TypeScript (node, preload, web), Vitest                                      |
+| `npm run mock-gnani`                  | Local mock of Gnani's STT WebSocket, for offline runs                                |
+| `npm run mock-llm`                    | Local scripted stand-in for the AI model, for offline runs                           |
+| `npm run demo-audio`                  | Synthesise the fictional Hinglish demo call with Gnani TTS                           |
+| `npm run fixtures`                    | Regenerate the synthetic test WAVs                                                   |
+| `npm run dist:win`                    | Build the Windows installer (run on Windows)                                         |
+| `npm run test:e2e` / `test:live`      | Optional end-to-end tests of the real app (need Playwright, see [Testing](#testing)) |
+
+## Try it with no keys
+
+Everything below runs on your machine. No Gnani credits, no AI model.
+
+```powershell
+npm run mock-gnani                                   # terminal 1
+npm run mock-llm                                     # terminal 2
+$env:GNANI_API_KEY="test-key"                        # terminal 3
+$env:GNANI_STT_URL="ws://127.0.0.1:8787/stt/v3/stream"
+$env:LLM_BASE_URL="http://127.0.0.1:8788/v1"; $env:LLM_MODEL="mock"
+npm run dev
+```
+
+1. **Context → Choose folder…** → pick `demo-context` in this repo (a made-up paint
+   distributor: stock, prices, call notes).
+2. **Settings → Audio → Replay WAV files** → choose `test\fixtures\them.wav` and
+   `test\fixtures\me.wav`.
+3. **Start**. The fixtures are tone bursts, not voices; the mock "transcribes" each tone
+   into a scripted Hinglish line. You will see the dealer's question, its meaning in
+   English, and **Answer · from your files** with `inventory.csv` and `price-list.md`.
+4. While it runs, type `what did we promise on delivery?` in the bar and press Enter.
+   Then try `what is their GST number?` to see the "not in your files" card.
+
+**With real speech and the real Gnani API:** `npm run demo-audio` creates
+`demo-audio\them.wav` and `demo-audio\me.wav`, the same kind of call spoken by Gnani's
+own TTS voices, with three questions the demo files answer. In Bolo, **Settings → Audio →
+Demo** loads them. Use 1× speed against the real API: Gnani wants real-time cadence.
+
+**Recording a demo video:** a protected overlay does not show up in a screen recording.
+Set `BOLO_RECORDABLE=1` to turn protection off while you record. The bar then says so in
+amber. To show the hiding itself, record a second clip of a real screen share with
+protection on.
+
+## Try it free, without a Gnani key
+
+For testing before you have Gnani credits, Bolo can use any OpenAI-compatible
+`/audio/transcriptions` endpoint instead. **Groq's free tier** covers both halves with one
+key and no card: Whisper for speech-to-text, and a chat model for answers. Create a key at
+console.groq.com, then put this in `.env`:
+
+```
+STT_PROVIDER=whisper
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=openai/gpt-oss-20b
+LLM_API_KEY=gsk_your_key
+LLM_REASONING_EFFORT=low
+```
+
+The Whisper adapter defaults to Groq's endpoint and reuses `LLM_API_KEY` because it is the
+same service. Then set **Settings → AI model → File content sent per answer** to 8k or
+less: Groq's free chat limit is about 8,000 tokens a minute.
+
+What changes compared with Gnani:
+
+- **Lines appear after each pause, not while you speak.** Whisper takes whole clips, so Bolo
+  cuts the audio at pauses (0.7 s) and sends each piece. Expect roughly a second more delay.
+- **Limits.** Groq's free tier (checked October 2026, shared by all keys in one account):
+  Whisper 20 requests a minute and about 8 hours of audio a day, chat about 1,000
+  requests and 200,000 tokens a day. A rate limit shows on the dot as a short retry.
+- **Hinglish comes back mostly in Devanagari**, English words included.
+- **No screen reading on the free Groq models**: none of them accepts images.
+- **Free tiers are for synthetic or consented calls.** Read the provider's data terms before
+  using real customer conversations.
+
+A local Whisper server works too: set `WHISPER_BASE_URL` to its `/v1` URL and leave the
+key empty. For the submission and demo video, switch back to Gnani by removing
+`STT_PROVIDER`.
 
 ## Environment variables
 
@@ -74,71 +171,96 @@ Keys are read **only by the Electron main process**, never sent to the UI and ne
 logged. Bolo looks for them in this order: real environment variables, then `.env` in the
 folder you start Bolo from (development), then `%APPDATA%\Bolo\.env` (installed app).
 
-| Variable             | Required        | Meaning                                                                                                                           |
-| -------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `GNANI_API_KEY`      | yes             | Gnani API key, sent as the `x-api-key-id` header                                                                                  |
-| `GNANI_STT_URL`      | no              | Streaming endpoint. Default `wss://api.vachana.ai/stt/v3/stream`. Point it at the mock with `ws://127.0.0.1:8787/stt/v3/stream`   |
-| `LLM_BASE_URL`       | for suggestions | Any OpenAI-compatible API, e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1` (Ollama), `http://<host>:8000/v1` (vLLM) |
-| `LLM_MODEL`          | for suggestions | e.g. `gpt-4o-mini`, `llama3.2`                                                                                                    |
-| `LLM_API_KEY`        | depends         | Bearer token; leave empty for local servers                                                                                       |
-| `BOLO_OPAQUE_WINDOW` | no              | `1` = opaque overlay, for GPUs that render transparent windows badly                                                              |
-| `GNANI_TTS_URL`      | no              | Override the TTS endpoint used by `npm run demo-audio`                                                                            |
+| Variable               | Required    | Meaning                                                                                                                              |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `GNANI_API_KEY`        | yes\*       | Gnani API key, sent as the `x-api-key-id` header                                                                                     |
+| `GNANI_STT_URL`        | no          | Streaming endpoint. Default `wss://api.vachana.ai/stt/v3/stream`. Point it at the mock with `ws://127.0.0.1:8787/stt/v3/stream`      |
+| `LLM_BASE_URL`         | for answers | Any OpenAI-compatible API, e.g. `https://api.openai.com/v1`, `http://localhost:11434/v1` (Ollama), `http://<host>:8000/v1` (vLLM)    |
+| `LLM_MODEL`            | for answers | e.g. `gpt-4o-mini`, `llama3.2`                                                                                                       |
+| `LLM_API_KEY`          | depends     | Bearer token; leave empty for local servers                                                                                          |
+| `LLM_REASONING_EFFORT` | no          | For thinking models: `low` (or `none` on Gemini 2.5 Flash) makes them answer in seconds instead of 20 s or more. Not sent when empty |
+| `BOLO_OPAQUE_WINDOW`   | no          | `1` = opaque overlay, for GPUs that render transparent windows badly                                                                 |
+| `BOLO_RECORDABLE`      | no          | `1` = demo mode: the overlay is visible in screen recordings and shares                                                              |
+| `BOLO_USER_DATA`       | no          | Settings folder to use instead of `%APPDATA%\Bolo` (the end-to-end tests use a throwaway one)                                        |
+| `GNANI_TTS_URL`        | no          | Override the TTS endpoint used by `npm run demo-audio`                                                                               |
+| `STT_PROVIDER`         | no          | `whisper` = use a Whisper endpoint instead of Gnani, for testing (see above). Default `gnani`                                        |
+| `WHISPER_BASE_URL`     | no          | Default `https://api.groq.com/openai/v1`. Any OpenAI-compatible `/audio/transcriptions` server                                       |
+| `WHISPER_MODEL`        | no          | Default `whisper-large-v3`. `whisper-large-v3-turbo` is faster and a little less accurate                                            |
+| `WHISPER_API_KEY`      | no          | Defaults to `LLM_API_KEY` when both point at the same service; never sent to a different one                                         |
 
-The LLM base URL and model can also be changed in Settings; those values override the
-`.env` defaults. The key can only come from the environment.
+\* Not needed with `STT_PROVIDER=whisper`.
 
-## File-replay mode (no microphone needed)
-
-Replay mode feeds WAV files through **exactly the same pipeline** as live audio: decode,
-mono, resample to 16 kHz, PCM16, 1024-byte frames, at real-time pace. It goes over the
-same MessagePorts to the same Gnani client. One file is "Them", the other is "Me".
-
-**Fully offline, no credits** — mock STT server plus the synthetic test fixtures:
-
-```powershell
-npm run mock-gnani                                   # terminal 1
-$env:GNANI_API_KEY="test-key"; $env:GNANI_STT_URL="ws://127.0.0.1:8787/stt/v3/stream"
-npm run dev                                          # terminal 2
-```
-
-Settings → Audio → **Replay WAV files** → back → choose `test\fixtures\them.wav` and
-`test\fixtures\me.wav` → **▶ Start replay**. The fixtures are tone bursts, not voices;
-the mock "transcribes" each tone into a scripted Hinglish line. The first "me" burst is a
-quiet copy of "them", to show the echo removal.
-
-**With real speech and the real Gnani API:**
-
-1. `npm run demo-audio` creates `demo-audio\them.wav` and `demo-audio\me.wav`: an
-   eight-turn fictional Hinglish insurance call, spoken by Gnani's own TTS voices. Add
-   `-- --echo` to also leak "them" into the mic track, like laptop speakers would.
-2. In Bolo, click **Demo** to load them, turn on **Play aloud**, and start. This is a good
-   way to show Gnani's code-mixed recognition in a demo video.
-
-Any WAV works (8–48 kHz, mono/stereo, 16/24/32-bit or float). Replay speed is adjustable
-(1×–4×). Gnani wants real-time cadence, so use 1× against the real API.
+The LLM base URL, model and vision model can also be changed in Settings; those values
+override the `.env` defaults. Keys can only come from the environment. A base URL typed
+into Settings must be `https`, or plain `http` to this computer or the local network: the
+key, the transcript and your files travel in that request.
 
 ## Using Bolo
 
 | Hotkey             | Action                                          |
 | ------------------ | ----------------------------------------------- |
-| `Ctrl+Shift+Space` | Suggest a reply now, from any app               |
+| `Ctrl+Shift+Space` | Answer what they just said, from any app        |
+| `Ctrl+Alt+Space`   | Answer from my screen (needs a vision model)    |
 | `Ctrl+Shift+H`     | Show / hide the overlay (doesn't steal focus)   |
 | `Ctrl+Shift+M`     | Click-through: mouse goes to the app underneath |
 
-- **Listening** (red, pulsing) is shown whenever audio is being captured.
-- Each side has a status pill: connection state, input level and measured latency
-  (end of speech → final text). Hover for Gnani's reported processing time.
-- **Auto-suggest**: when "them" finishes a sentence that looks like a question, a
-  suggestion appears by itself (at most one every 8 s).
-- **Reply language**: same as the call, Hinglish (Roman script), or English.
-- **Context**: a short note sent with every request, e.g. "I'm selling term insurance; be
-  concise and polite."
-- **Echo**: without headphones the mic also hears the other person. Bolo drops "me" lines
-  that closely match a "them" line from the last few seconds. Headphones are still better.
-- **Silence gate** (off by default): stops streaming silence to save credits. About 1 s of
-  trailing silence is still sent, so Gnani's VAD can end each utterance.
-- **Export**: when a session ends, the transcript and suggestions are saved as Markdown and
-  JSON to a folder you choose (`bolo-session-YYYY-MM-DD_HH-MM-SS.md/.json`).
+**The bar.** Start/Stop with a call timer; one dot per side (green = connected, hover for
+latency); the Ask box; a screen toggle; a shield; expand/collapse; a menu. The window is
+exactly as tall as what is open, and the bar is the drag handle.
+
+**The shield** is green and reads "Hidden from screen share" only on a Windows build
+where that was checked. Anywhere else it is amber: "May be visible when sharing".
+
+**Context folder.** `.txt`, `.md`, `.csv`, `.tsv` and `.json` files at the top level of
+one folder. Limits: 50 files, 1 MB each, 4 MB in total. Other files are listed as skipped
+with the reason. Excel users: save as **CSV UTF-8**. Files are read when a call starts
+and when you press Reload.
+
+**Answers** appear by themselves when they ask a question, on the hotkey, or when you
+type a question in the bar. Everything answers only while a call (live or replay) is
+running.
+
+| Card title                 | What it means                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| Answer · checking          | Still arriving. Nothing is claimed yet                                                 |
+| Answer · from your files   | A file that was sent is cited, and every number in the answer appears in what was sent |
+| Answer · from this call    | Taken from the transcript or your note, numbers checked the same way                   |
+| Answer · from your screen  | Read off a screenshot by the AI model. Bolo cannot check it, and says so               |
+| Answer · not in your files | The fact was not found. You get a polite line to buy time                              |
+| Answer · check this figure | A number in the answer is not in your files or the call. Do not read it out            |
+| Suggested reply            | A plain reply that needs no fact, or no context folder is loaded                       |
+
+**Meaning line.** Set the language you read in Settings. Under a line from the other
+person that mixes in other languages, Bolo shows the plain meaning. Click any of their
+lines to explain it again. Turn it off with "Show a plain meaning…".
+
+**Screen.** Set a **Vision model** in Settings (a model that accepts images). Then
+`Ctrl+Alt+Space` answers from your screen, or switch on the screen toggle in the Ask box
+to attach the screen to one typed question. One still picture is taken at that moment,
+sent to that model, and kept nowhere.
+
+**Also:** reply language (same as the call, Hinglish in Roman script, or English); echo
+removal when you are not on headphones; a silence gate to save credits; and an export of
+the transcript, meanings, answers and their sources as Markdown and JSON when a call ends.
+
+## How answers are kept honest
+
+A model can invent a figure and still say it came from your file. So Bolo checks:
+
+1. The model must end its reply with a source line, for example
+   `[source: inventory.csv, transcript]`. Bolo removes that line from what you see.
+2. A cited file counts only if its content was actually in that request.
+3. Every number in the answer must appear, as a whole number, in the file content that
+   was sent, your note, the transcript or your typed question. `50` does not pass because
+   the file says `1500`. Commas, currency signs, `12.50` versus `12.5` and Indian-script
+   digits are handled.
+4. Only then does the card say "from your files". A failed check says "check this figure".
+
+Known limits: a total the model worked out itself fails the check, and so does a number
+your files only spell out in words. That is on purpose: a false warning is cheap, a wrong
+figure read to a client is not. On a folder larger than the context budget, files are
+searched by matching words, so a Hindi word will not find its English column name; small
+folders are sent whole.
 
 ## Architecture
 
@@ -150,16 +272,20 @@ flowchart LR
     WAV[FileAudioSource<br/>WAV replay] -.-> P
     WM --> P[MessagePort per speaker]
     WT --> P
-    UI[React overlay]
+    UI[React overlay<br/>bar + panel]
   end
-  subgraph Main["Main process (keys live here)"]
+  subgraph Main["Main process (keys, files and screen stay here)"]
     P --> CS[CopilotSession]
     CS --> GS[GnaniSttProvider<br/>1 WebSocket / speaker]
     GS <--> G[(Gnani STT)]
     GS --> CS
     CS --> TB[TranscriptBuffer<br/>+ echo dedupe<br/>+ question detector]
-    TB --> SE[SuggestionEngine]
+    CTX[Context folder<br/>chunks] --> SE
+    CAP[Screen capture<br/>on demand] --> SE
+    TB --> SE[SuggestionEngine<br/>+ source and number check]
+    TB --> GL[GlossEngine<br/>meaning line]
     SE --> LLM[OpenAiCompatibleProvider]
+    GL --> LLM
     LLM <--> M[(LLM API)]
     CS --> EX[Export .md / .json]
   end
@@ -178,34 +304,38 @@ WebSocket to Gnani, so every line is labelled correctly without a speaker model.
 | `AudioSourceController` (`src/renderer/src/audio/types.ts`) | `LiveCapture`, `FileReplay` | WAV fixtures through `FileAudioSource`                                   |
 
 **Audio path.** 48 kHz (or any rate) Float32 → downmix → streaming windowed-sinc resampler
-(anti-aliased, kernel lookup table) → 16 kHz → PCM16 little-endian → exact 1024-byte
-frames (512 samples = 32 ms). `FrameEncoder` (`src/shared/audio/frame-encoder.ts`) does
-all of this. The AudioWorklet and the file replay both use it, so the two paths produce
-identical frames.
+→ 16 kHz → PCM16 little-endian → exact 1024-byte frames (512 samples = 32 ms).
+`FrameEncoder` does all of this; the AudioWorklet and the file replay both use it, so the
+two paths produce identical frames.
 
-**Session logic** (`src/core/session/copilot-session.ts`) knows nothing about Electron.
-It opens the two STT streams, applies the silence gate, and adds final segments to the
-`TranscriptBuffer`. It removes echoes in both directions: a "me" line arriving after the
-"them" line, or before it. It triggers auto-suggest on questions and records everything
-for export. Because it's plain TypeScript, the whole flow is tested in Node with the WAV
-fixtures and both mock servers.
+**Session logic** (`src/core/session/copilot-session.ts`) knows nothing about Electron, so
+the whole flow is tested in Node with the WAV fixtures and both mock servers.
 
 **Pure, tested building blocks:**
 
-- `question-detector.ts` — English, Hindi (Devanagari and romanised), Hinglish and some
-  Tamil/Tanglish question words (kya, kaise, kab, kyun, kitna, kaun, enna, evlo…), "?",
-  leading English auxiliaries ("can you…"), tag questions ("…hai na") and a few
-  exclamation exceptions ("kya baat hai").
-- `echo-dedupe.ts` — character-trigram similarity (Dice, or containment for partial
-  pickup), Unicode-aware, ±5 s window, 0.6 threshold.
-- `transcript/buffer.ts` and `format.ts` — ordered rolling buffer, `getRecent(minutes)`,
-  and the `[mm:ss] Them: …` prompt formatter, which merges consecutive lines.
-- `resampler.ts`, `pcm16.ts`, `chunker.ts`, `wav.ts`, `silence-gate.ts`.
+- `core/context/context.ts` — decoding (UTF-8, UTF-16 with a byte-order mark; anything
+  else is skipped, never garbled), CSV rows with quoted line breaks, chunking, and
+  selection: everything if it fits the budget, otherwise the chunks sharing the rarest
+  words with the question.
+- `core/suggest/answer.ts` — source-line parsing, the number check, and the one ordered
+  rule that picks the card label.
+- `core/suggest/engine.ts` — one answer at a time. Your own request cancels the one in
+  flight. A question from the caller that arrives while an answer is busy is kept (newest
+  only) and answered next, so two quick questions both get answers.
+- `core/gloss/engine.ts` — the meaning line: one request at a time, in order; a slow,
+  failed or stale request leaves its line without a meaning and never holds up the
+  transcript or an answer.
+- `question-detector.ts`, `echo-dedupe.ts`, `transcript/buffer.ts`, `resampler.ts`,
+  `pcm16.ts`, `chunker.ts`, `wav.ts`, `silence-gate.ts`.
+
+**The window.** A frameless, transparent, always-on-top window 620 px wide at the
+top-centre. The renderer reports the height of its content and the main process resizes
+the window to match, so nothing invisible blocks clicks on the app underneath.
 
 ## Gnani integration and what to verify
 
-`docs.gnani.ai` was blocked from the environment this was built in, so the protocol was
-taken from the **official `gnani-vachana` Python SDK (v0.7.9, PyPI)** source. All of it
+`docs.gnani.ai` was blocked from the environment this was first built in, so the protocol
+was taken from the **official `gnani-vachana` Python SDK (v0.7.9, PyPI)** source. All of it
 lives in one adapter file: [`src/core/stt/gnani-protocol.ts`](src/core/stt/gnani-protocol.ts).
 
 What the SDK establishes:
@@ -221,30 +351,31 @@ What the SDK establishes:
   (32 ms at 16 kHz). Don't buffer and burst; it hurts the VAD.
 - Streaming languages: hi-IN, en-IN, ta-IN, te-IN, kn-IN, ml-IN, mr-IN, bn-IN, gu-IN, pa-IN.
 
-### `TODO(verify-gnani)` items to check on your laptop
+### Checked against the real API
 
-Each one is marked in the code. The [checklist in WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md#gnani-verification-checklist)
-gives a step for each.
+Run with a real key on 2026-10-23. What is still open is marked `TODO(verify-gnani)` in
+the code.
 
-1. **Endpoint**: the SDK only uses `wss://api.vachana.ai/stt/v3/stream`; the
-   `wss://api.gnani.ai/prisma/v3/stream` URL from other material never appears. If your
-   key needs it, set `GNANI_STT_URL`.
-2. **Handshake**: confirm no JSON config/start message is needed after connecting.
-3. **Bad key**: HTTP 401/403 on upgrade, or an `error` message? Bolo treats both as fatal
-   (no retry loop).
-4. **Partial transcripts**: the SDK only knows final `transcript` messages. Bolo also
-   accepts `partial`/`interim` types or `is_final: false`, in case the server sends them.
-5. **`latency` field** meaning (SDK: server-side processing ms) and **`segment_index`**
-   type (SDK: string; both handled).
-6. **Hinglish**: the SDK listed `en-hi-in-cm` ("Hinglish, code-mixed, experimental") up to
-   v0.7.5 and removed it in v0.7.8. Bolo offers it as an experimental option. Compare it
-   with `hi-IN` on the same clip.
-7. **Auto-detect**: SDK v0.3–0.7.5 sent a comma-separated language list as `lang_code`.
-   Bolo offers this as an experimental "Auto-detect" option; it may no longer work.
-8. **End of stream**: the SDK just closes the socket. Bolo waits up to 2 s for an
-   in-flight transcript, then closes with code 1000. Check whether a flush message exists.
-9. **TTS for `npm run demo-audio`**: `POST /api/v1/tts/inference`, `timbre-v2.5`, voices
-   `Poorvi` (Hinglish) and `Roopesh` (Hindi), `language: "auto"`.
+1. **Endpoint**: `wss://api.vachana.ai/stt/v3/stream` works.
+2. **Handshake**: headers only. The first message is `connected`, with a config that
+   includes `chunk_size: 512` and `partials_enabled: false`.
+3. **Bad key**: HTTP 401 on the upgrade (`INVALID_API_KEY`). Bolo shows a red error and
+   does not retry.
+4. **Messages**: `speech_start`, then one final `transcript` per utterance. No partial
+   results and no `processing` message.
+5. **Fields**: `segment_index` is a number. `latency` is a number (144–269 ms seen), but
+   what it measures is still unconfirmed.
+6. **Hinglish**: `en-hi-in-cm` is refused, so Bolo no longer offers it. `hi-IN` handles
+   Hinglish and writes English words in Devanagari ("एक्सटीरियर इमल्शन 5 लीटर").
+7. **Auto-detect**: comma-separated lists are refused. Bolo sends `indic-auto`, which is
+   accepted; its accuracy is untested. A refused language (close code 1008) is a red
+   error, not endless retries.
+8. **End of stream**: closing the socket loses an unfinished sentence, and there is no
+   flush message. On Stop, Bolo sends up to 3 s of silence until the last line comes back.
+9. **Idle**: the server ends a stream after 60 s without speech, even with pings. Bolo
+   reconnects.
+10. **TTS for `npm run demo-audio`**: works as written (`timbre-v2.5`, voices `Poorvi` and
+    `Roopesh`, `language: "auto"`).
 
 ## Suggestion models
 
@@ -256,13 +387,13 @@ implementation covers:
 | OpenAI                       | `https://api.openai.com/v1` | `gpt-4o-mini`               | your key      |
 | Groq / Together / OpenRouter | their `/v1` URL             | their model id              | your key      |
 | Ollama on your laptop        | `http://localhost:11434/v1` | `llama3.2`, `qwen2.5:7b`, … | (empty)       |
-| Evon (or any model) on vLLM  | `http://<host>:8000/v1`     | the served model name       | if configured |
+| Any model on vLLM            | `http://<host>:8000/v1`     | the served model name       | if configured |
 
-No local LLM runs by default. Bolo itself stays light next to Zoom/Teams. A hosted model
-gives the fastest first words; Ollama on the RTX 4050 works for 3–8B models. `<think>`
-blocks from reasoning models are stripped. The prompt
-([`src/core/suggest/prompt.ts`](src/core/suggest/prompt.ts)) asks for 1–3 short, speakable
-lines and forbids invented facts (prices, dates, terms).
+A hosted model gives the fastest first words. Local models work, with two things to know:
+lower **File content sent per answer** in Settings so the prompt fits the model's context
+window, and consider turning the meaning line off, because it adds one request per line
+they say. `<think>` blocks from reasoning models are stripped. Screen reading uses the
+**Vision model** from Settings, on the same base URL and key.
 
 ## Security and privacy
 
@@ -270,36 +401,46 @@ lines and forbids invented facts (prices, dates, terms).
   sees the typed API in [`src/preload/api.ts`](src/preload/api.ts).
 - API keys stay in the main process. The UI only learns whether a key was found. Keys are
   never logged, and error messages never echo them (tested).
+- **Your files stay in the main process.** The UI gets file names and sizes only (tested).
+  File content goes to the AI model you configured, to answer questions, and nowhere else.
+- **Screenshots are taken only when you ask**, in the main process, with the overlay
+  hidden for the capture. The image is sent to the vision model for that one request,
+  never written to disk, never sent to the UI and never exported (tested).
+- File content, the transcript and anything on your screen are passed to the model as
+  reference data with the instruction never to follow instructions found inside them.
 - IPC handlers accept messages only from the overlay's top frame. Settings from the
-  renderer are validated field by field, and the export folder can only be set through
-  the native folder dialog.
+  renderer are validated field by field, and the export and context folders can only be
+  set through the native folder dialog (tested).
 - Strict Content-Security-Policy; navigation and new windows are blocked; only the
   `media` and `display-capture` permissions are granted.
-- `setContentProtection(true)` hides the overlay from screen sharing and recording.
-- First-run notice reminds you to get the other party's consent before recording.
-- Fixtures and demo audio are synthetic (tones, or TTS reading a fictional script). No
-  real personal data is used anywhere. Transcripts are saved only to the folder you choose.
+- First-run notice says what is sent where, and reminds you to get the other party's
+  consent before recording.
+- Fixtures, demo audio and demo files are synthetic. No real personal data is used
+  anywhere. Transcripts are saved only to the folder you choose.
 
 ## Testing
 
 ```powershell
-npm test        # 165 tests: audio, STT client vs mock server, LLM vs mock server,
-                # session end to end with WAV fixtures, export, settings, UI reducer
+npm test        # 222 tests: audio, STT client vs mock server, LLM vs mock server, context
+                # files, answer checks, meanings, session end to end with WAV fixtures,
+                # export, settings, UI reducer
 ```
 
-Two optional end-to-end checks need Playwright. They aren't dependencies, so install it
-temporarily:
+Two optional checks drive the **real app**. They need Playwright, which is not a
+dependency, so install it temporarily:
 
 ```powershell
 npm run build
 npm i --no-save playwright
-npx playwright install chromium     # only for test:ui
-npm run test:ui     # built overlay in Chromium: fake bolo API + fake mic (worklet path)
-npm run test:e2e    # the real Electron app vs mock Gnani + mock LLM, replaying fixtures
+npm run test:e2e    # the Electron app vs mock Gnani + mock AI, replaying fixtures: bar
+                    # position and size, context folder, grounded answer, typed question,
+                    # "not in your files", screen answer, meanings, export, key handling
+npm run test:live   # real microphone + system-audio loopback into the mock Gnani server
 ```
 
-Both pass in the build environment (Linux; `xvfb-run -a` was used for Electron).
-Screenshots go to `test-results/`.
+Both pass on Windows 11. Screenshots go to `test-results/`. If you start them from a
+terminal inside an Electron-based editor and the app exits at once, clear
+`ELECTRON_RUN_AS_NODE` first (the scripts already do this for the app they launch).
 
 ## Windows installer
 
@@ -315,8 +456,7 @@ choosable folder. It's unsigned, so SmartScreen will warn. Settings and
 ## Dependencies
 
 Runtime: **`ws`** only — the WebSocket client for Gnani. Gnani authenticates with custom
-headers on the WebSocket upgrade request, which the standard WebSocket API can't set;
-`ws` supports them, along with ping/pong for detecting dead connections.
+headers on the WebSocket upgrade request, which the standard WebSocket API can't set.
 
 Development:
 
@@ -330,10 +470,10 @@ Development:
 | `prettier`                                                                          | Formatting                                                                                |
 | `electron-builder`                                                                  | Windows installer                                                                         |
 
-Deliberately avoided: `dotenv` (20-line parser in `src/core/util/dotenv.ts`), an
-OpenAI SDK (`fetch` + a small SSE parser), and any audio or resampling library. Scripts in
-`scripts/*.ts` run directly with Node ≥ 22.18's built-in TypeScript type-stripping
-(no `ts-node`/`tsx`).
+Deliberately avoided: `dotenv`, an OpenAI SDK (`fetch` + a small SSE parser), any audio
+or resampling library, an OCR library (the screenshot goes to a vision model), and a
+vector database (word matching, with whole-folder sending for small folders). Scripts in
+`scripts/*.ts` run directly with Node ≥ 22.18's built-in TypeScript type-stripping.
 
 ## Project layout
 
@@ -348,13 +488,17 @@ src/
   core/              Node-only logic, no Electron imports (testable)
     stt/             SttProvider, Gnani protocol adapter + provider, backoff
     llm/             LlmProvider, OpenAI-compatible provider, SSE parser, think filter
-    suggest/         prompt builder, SuggestionEngine
+    context/         reference files: decode, chunk, select
+    suggest/         prompt builder, answer checks, SuggestionEngine
+    gloss/           meaning line for mixed-language speech
     session/         CopilotSession, export
-  main/              Electron main: window, hotkeys, IPC, permissions, settings store
+  main/              Electron main: window, hotkeys, IPC, permissions, settings store,
+                     context folder loader, screen capture
   preload/           contextBridge API
-  renderer/          React overlay, AudioWorklet, live capture, file replay
+  renderer/          React overlay (bar, tabs, answer card), AudioWorklet, live capture, file replay
 test/                Vitest tests, mock servers, synthetic fixtures
-scripts/             fixtures, mock server, demo audio, UI/E2E checks
-docs/                WINDOWS_TESTING.md
+scripts/             fixtures, mock servers, demo audio, end-to-end checks
+demo-context/        synthetic stock sheet, price list and call notes for the demo
+docs/                WINDOWS_TESTING.md, design record
 build/               app icon
 ```

@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['out/**', 'dist/**', 'release/**', 'node_modules/**', 'coverage/**'] },
+  { ignores: ['out/**', 'dist/**', 'release/**', 'node_modules/**', 'coverage/**', '.gstack/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -29,7 +29,7 @@ export default tseslint.config(
   },
   {
     // Runs in Node but evaluates callbacks inside the page.
-    files: ['scripts/ui-smoke.mjs', 'scripts/e2e-electron.mjs'],
+    files: ['scripts/e2e-live.mjs', 'scripts/e2e-electron.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {

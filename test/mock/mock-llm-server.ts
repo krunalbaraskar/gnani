@@ -12,6 +12,10 @@ export interface MockLlmOptions {
   json?: boolean;
   /** Use \r\n line endings and split SSE lines across writes. */
   awkwardFraming?: boolean;
+  /** Fixed port; default is any free one. */
+  port?: number;
+  /** Choose the reply from the request; overrides `tokens`. */
+  reply?: (body: RecordedRequest['body']) => string;
 }
 
 export interface RecordedRequest {
@@ -20,7 +24,8 @@ export interface RecordedRequest {
   body: {
     model: string;
     stream: boolean;
-    messages: { role: string; content: string }[];
+    // Text, or text and image parts when a screenshot is attached.
+    messages: { role: string; content: string | { type: string; text?: string }[] }[];
     max_tokens?: number;
   };
 }
@@ -50,7 +55,9 @@ export class MockLlmServer {
           res.end(o.errorBody ?? JSON.stringify({ error: { message: 'mock failure' } }));
           return;
         }
-        const tokens = o.tokens ?? ['Ji', ' bilkul', '!'];
+        const said = o.reply?.(this.requests.at(-1)!.body);
+        // Word-sized chunks, so a scripted reply streams the way a real one does.
+        const tokens = said?.match(/\S+\s*/g) ?? o.tokens ?? ['Ji', ' bilkul', '!'];
         if (o.json) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ choices: [{ message: { content: tokens.join('') } }] }));
@@ -75,7 +82,7 @@ export class MockLlmServer {
         res.end(`data: [DONE]${nl}${nl}`);
       });
     });
-    await new Promise<void>((r) => this.server!.listen(0, '127.0.0.1', r));
+    await new Promise<void>((r) => this.server!.listen(this.opts.port ?? 0, '127.0.0.1', r));
     return `http://127.0.0.1:${(this.server.address() as AddressInfo).port}/v1`;
   }
 

@@ -10,6 +10,12 @@ export interface OpenAiCompatibleConfig {
   apiKey?: string;
   /** Abort if no response headers arrive within this time. */
   timeoutMs?: number;
+  /**
+   * Sent as `reasoning_effort` only when set: thinking models (Gemini 2.5, Groq's gpt-oss)
+   * think before the first word, and "low" or "none" makes them answer in seconds. Servers
+   * without the field may reject it, so it is never sent by default.
+   */
+  reasoningEffort?: string;
   fetch?: typeof fetch;
 }
 
@@ -34,7 +40,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
   async *streamChat(req: LlmRequest): AsyncIterable<string> {
     const doFetch = this.cfg.fetch ?? fetch;
     const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(), this.cfg.timeoutMs ?? 20_000);
+    const waitMs = req.timeoutMs ?? this.cfg.timeoutMs ?? 20_000;
+    const timer = setTimeout(() => timeout.abort(), waitMs);
     const signal = req.signal ? AbortSignal.any([req.signal, timeout.signal]) : timeout.signal;
 
     const headers: Record<string, string> = {
@@ -53,15 +60,15 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           model: this.cfg.model,
           messages: req.messages,
           stream: true,
-          max_tokens: req.maxTokens ?? 200,
+          max_tokens: req.maxTokens ?? 800,
           temperature: req.temperature ?? 0.4,
+          ...(this.cfg.reasoningEffort ? { reasoning_effort: this.cfg.reasoningEffort } : {}),
         }),
       });
     } catch (err) {
       clearTimeout(timer);
       if (req.signal?.aborted) throw err;
-      if (timeout.signal.aborted)
-        throw new LlmError(`LLM did not respond within ${this.cfg.timeoutMs ?? 20_000} ms`);
+      if (timeout.signal.aborted) throw new LlmError(`LLM did not respond within ${waitMs} ms`);
       throw new LlmError(`Could not reach the LLM at ${this.endpoint}: ${(err as Error).message}`);
     }
     clearTimeout(timer);

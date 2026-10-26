@@ -11,6 +11,11 @@ export const IPC = {
   chooseExportDir: 'bolo:choose-export-dir',
   openExportDir: 'bolo:open-export-dir',
   readDemoAudio: 'bolo:read-demo-audio',
+  chooseContextDir: 'bolo:choose-context-dir',
+  reloadContext: 'bolo:reload-context',
+  ask: 'bolo:ask',
+  askScreen: 'bolo:ask-screen',
+  requestMeaning: 'bolo:request-meaning',
   window: 'bolo:window',
   audioPort: 'bolo:audio-port',
   event: 'bolo:event',
@@ -26,31 +31,56 @@ export interface LanguageOption {
   supportsItn?: boolean;
 }
 
+/** The context folder as the overlay shows it. File contents never reach the renderer. */
+export interface ContextView {
+  dir: string;
+  files: { name: string; info: string }[];
+  skipped: { name: string; reason: string }[];
+  /** Set when the folder itself could not be read. */
+  error?: string;
+}
+
+/**
+ * Whether other people can see the overlay when the screen is shared:
+ * hidden = checked by hand on this platform and OS build · unverified = may be visible ·
+ * demo = protection deliberately off so the overlay can be recorded (BOLO_RECORDABLE=1).
+ */
+export type ShareProtection = 'hidden' | 'unverified' | 'demo';
+
 export interface AppState {
   settings: Settings;
   languages: LanguageOption[];
   /** Whether keys were found — the keys themselves never leave the main process. */
-  keys: { gnani: boolean; llm: boolean };
+  keys: { stt: boolean; llm: boolean };
+  /** The speech-to-text service in use: Gnani, or a Whisper endpoint for testing. */
+  stt: { name: string; keyVar: string; url: string };
   /** Effective LLM endpoint and model after applying env defaults. */
   llm: { baseUrl: string; model: string };
-  sttUrl: string;
   platform: string;
   clickThrough: boolean;
   sessionRunning: boolean;
   /** Where demo WAVs are looked for (see npm run demo-audio). */
   demoAudioDir: string;
+  context: ContextView;
+  shareProtection: ShareProtection;
 }
 
 export interface SuggestionView {
   id: string;
-  trigger: 'hotkey' | 'auto';
+  trigger: 'hotkey' | 'auto' | 'typed' | 'screen';
   question?: string;
+  /** The question the user typed, if any. */
+  asked?: string;
   text: string;
   startedAt: number;
   finishedAt?: number;
   firstTokenMs?: number;
   error?: string;
   cancelled?: boolean;
+  /** Set when the answer has finished: how far it can be trusted. */
+  verdict?: 'files' | 'call' | 'reply' | 'missing' | 'unverified' | 'screen';
+  sources?: string[];
+  usedScreen?: boolean;
 }
 
 export interface SttStatusView {
@@ -65,6 +95,8 @@ export interface SttStatusView {
 export type BoloEvent =
   | { type: 'segment'; segment: TranscriptSegment }
   | { type: 'segment-removed'; id: string; reason: 'echo' }
+  | { type: 'segment-meaning'; id: string; meaning: string }
+  | { type: 'context'; context: ContextView }
   | { type: 'partial'; speaker: Speaker; text: string }
   | { type: 'processing'; speaker: Speaker }
   | { type: 'stt-status'; status: SttStatusView }

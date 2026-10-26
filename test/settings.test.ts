@@ -26,6 +26,12 @@ describe('sanitizeSettings', () => {
     expect(s).not.toHaveProperty('unknownField');
   });
 
+  it('resets language codes Gnani refuses', () => {
+    expect(sanitizeSettings({ sttLanguage: 'indic-auto' }).sttLanguage).toBe('indic-auto');
+    expect(sanitizeSettings({ sttLanguage: 'en-hi-in-cm' }).sttLanguage).toBe('hi-IN');
+    expect(sanitizeSettings({ sttLanguage: 'hi-IN,en-IN' }).sttLanguage).toBe('hi-IN');
+  });
+
   it('merges over a base so partial updates keep other fields', () => {
     const base = { ...DEFAULT_SETTINGS, contextNote: 'keep me' };
     expect(sanitizeSettings({ autoSuggest: false }, base).contextNote).toBe('keep me');

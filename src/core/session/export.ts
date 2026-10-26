@@ -35,12 +35,25 @@ export function sessionToMarkdown(r: SessionRecord): string {
   type Item = { at: number; md: string };
   const items: Item[] = r.segments.map((s) => ({
     at: s.at,
-    md: `**[${formatClock(s.at - start)}] ${LABEL[s.speaker]}:** ${s.text}`,
+    md:
+      `**[${formatClock(s.at - start)}] ${LABEL[s.speaker]}:** ${s.text}` +
+      (s.meaning ? `  \n_Meaning: ${s.meaning}_` : ''),
   }));
   for (const s of r.suggestions) {
     if (!s.text && !s.error) continue;
     const label = s.trigger === 'auto' ? 'Suggestion (auto)' : 'Suggestion';
-    const body = s.error ? `_failed: ${s.error}_` : s.text.split('\n').join(' / ');
+    const asked = s.asked ? `_You asked: ${s.asked}_ — ` : '';
+    const from = [...(s.sources ?? []), ...(s.usedScreen ? ['screen'] : [])];
+    const tail = s.error
+      ? ''
+      : s.verdict === 'missing'
+        ? ' _(not in your files)_'
+        : s.verdict === 'unverified'
+          ? ' _(figure not checked)_'
+          : from.length
+            ? ` _(from ${from.join(', ')})_`
+            : '';
+    const body = asked + (s.error ? `_failed: ${s.error}_` : s.text.split('\n').join(' / ')) + tail;
     items.push({
       at: s.startedAt,
       md: `> 💡 **[${formatClock(s.startedAt - start)}] ${label}:** ${body}`,
