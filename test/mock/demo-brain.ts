@@ -24,6 +24,21 @@ export function demoReply(body: Body): string {
     (m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'),
   );
 
+  // "Catch me up" (see buildCatchupMessages).
+  if (system.includes('lost track of it')) {
+    return [
+      '- Asked you: stock and wholesale rate of the blue 5 litre',
+      '- Mehta Hardware wants to place an order',
+      '- Open: they want the quotation on WhatsApp',
+    ].join('\n');
+  }
+  // "Ask your meetings" (see src/core/meetings/ask.ts): cite the first record sent.
+  if (system.includes('about their own past meetings')) {
+    const record = /--- (meeting [^\n]*?)(?: transcript)? ---/.exec(user)?.[1];
+    return record
+      ? `Mehta Hardware asked for the quotation on WhatsApp.\n[source: ${record}]`
+      : 'That is not in your meetings.\n[source: missing]';
+  }
   // Minutes of the meeting (see src/core/minutes/minutes.ts).
   if (system.includes('You take notes on part')) {
     return '- Topics: stock and wholesale rate of blue 5 litre\n- Action items: send quotation on WhatsApp';
@@ -64,6 +79,11 @@ export function demoReply(body: Body): string {
 
   const asked = /My own question to you[^"]*"([^"]*)"/.exec(user)?.[1];
   if (asked) {
+    // Past meetings arrive as "meeting <date> <title>" entries in My files.
+    const meeting = /--- (meeting [^\n]*?) ---/.exec(user)?.[1];
+    if (/whatsapp/i.test(asked) && meeting) {
+      return `They asked for the quotation on WhatsApp, in our last meeting.\n[source: ${meeting}]`;
+    }
     if (/deliver/i.test(asked)) {
       return 'Delivery within 7 working days, free above ₹50,000. Agreed on the 12 September call.\n[source: project-notes.md]';
     }

@@ -9,14 +9,21 @@ const TITLE: Record<Verdict, string> = {
   missing: 'Answer · not in your files',
   unverified: 'Answer · check this figure',
   screen: 'Answer · from your screen',
+  recap: 'Catch-up · last 10 min',
 };
+
+/** Past meetings are cited as "meeting <date> <title>" (see core/meetings/memory.ts). */
+const isMeeting = (src: string) => src.startsWith('meeting ');
 
 function title(s: SuggestionView | null, streaming: boolean): string {
   if (!s) return 'Answer';
-  if (s.error) return 'Answer · failed';
+  const recap = s.trigger === 'catchup';
+  if (s.error) return recap ? 'Catch-up · failed' : 'Answer · failed';
   // Nothing claims to be verified until the check has run.
-  if (streaming || !s.verdict) return 'Answer · checking';
+  if (streaming || !s.verdict) return recap ? 'Catching you up…' : 'Answer · checking';
+  if (recap && s.verdict === 'unverified') return 'Catch-up · check this figure';
   if (s.verdict === 'call' && !s.sources?.includes('transcript')) return 'Answer · from your note';
+  if (s.verdict === 'files' && s.sources?.every(isMeeting)) return 'Answer · from past meetings';
   return TITLE[s.verdict];
 }
 
@@ -61,12 +68,12 @@ export function AnswerCard({
       {!s && (
         <p className="hint">
           Bolo answers when they ask a question. Ctrl+Shift+Space answers now; Ctrl+Alt+Space reads
-          your screen.
+          your screen; Ctrl+Shift+U catches you up.
         </p>
       )}
       {s?.error && <p className="error-text">{s.error}</p>}
       {s && !s.error && (
-        <div className={`answer-text ${s.usedScreen ? 'long' : ''}`}>
+        <div className={`answer-text ${s.usedScreen || s.trigger === 'catchup' ? 'long' : ''}`}>
           {s.text ? (
             <AnswerText text={s.text} />
           ) : streaming ? (
@@ -82,14 +89,18 @@ export function AnswerCard({
       {s && !streaming && !s.error && (
         <footer>
           {s.sources?.map((src) => (
-            <span key={src} className="chip">
-              {src}
+            <span key={src} className={`chip ${isMeeting(src) ? 'chip-meeting' : ''}`} title={src}>
+              {isMeeting(src) ? src.slice('meeting '.length) : src}
             </span>
           ))}
           {s.usedScreen && <span className="chip">screen</span>}
           {s.verdict === 'screen' && <span>read by the AI model, not checked</span>}
           {s.verdict === 'unverified' && (
-            <span>a number here is not in your files or the call</span>
+            <span>
+              {s.trigger === 'catchup'
+                ? 'a number here was not said in the call'
+                : 'a number here is not in your files or the call'}
+            </span>
           )}
           {s.firstTokenMs !== undefined && <span className="ms">{s.firstTokenMs} ms</span>}
         </footer>

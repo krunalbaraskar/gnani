@@ -42,6 +42,7 @@ writeFileSync(
     llmVisionModel: 'mock-vision',
     mode: 'active',
     myName: 'Krunal',
+    watchWords: 'Mehta Hardware',
   }),
 );
 
@@ -170,6 +171,11 @@ try {
   await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
   check(true, 'session started; the panel switched to Live');
 
+  // Their first line names a watch word: an alert, with no AI involved.
+  await page.getByText('Mentioned: Mehta Hardware').waitFor({ timeout: 15000 });
+  check(true, 'alert when they say a watch word');
+  await shot('3b-mention');
+
   // The client's question, its meaning, and an answer grounded in the files.
   await page.getByText(/142 units Pune godown/).waitFor({ timeout: 25000 });
   await page.getByText('Answer · from your files').waitFor({ timeout: 5000 });
@@ -205,6 +211,13 @@ try {
   await page.getByText('Answer · not in your files').waitFor({ timeout: 8000 });
   check(true, 'honest "not in your files" card');
   await shot('6-not-in-files');
+
+  // Catch me up: a recap of the call so far, read silently.
+  await page.getByRole('button', { name: /Catch me up/ }).click();
+  await page.getByText('Catch-up · last 10 min').waitFor({ timeout: 8000 });
+  await page.getByText(/Asked you: stock and wholesale rate/).waitFor();
+  check(true, 'catch-up recap shown, figures checked against the call');
+  await shot('6b-catch-up');
 
   // Screen question: the main process captures; the image goes only to the model.
   await page.evaluate(() => window.bolo.askScreen());
@@ -293,12 +306,34 @@ try {
   await lib.getByLabel('Search meetings').fill('quotation');
   await lib.locator('.lib-item').first().waitFor();
   await lib.getByLabel('Search meetings').fill('zebra crossing');
-  await lib.getByText('No meeting mentions that.').waitFor();
+  await lib.getByText(/^No meeting mentions all of that/).waitFor();
   check(true, 'search finds the meeting by a word and reports no match for others');
   const libTrusted = await lib.evaluate(() =>
     window.bolo.updateSettings({ exportDir: '/elsewhere' }).then((s) => s.exportDir),
   );
   check(libTrusted === exportDir, 'library window cannot change the export folder either');
+
+  // Ask your meetings: answered from this meeting, linked back to it.
+  await lib.getByLabel('Search meetings').fill('what did they want on whatsapp?');
+  await lib.getByLabel('Search meetings').press('Enter');
+  await lib.getByText('From your meetings').waitFor({ timeout: 8000 });
+  await lib.getByText('Mehta Hardware asked for the quotation on WhatsApp.').waitFor();
+  await lib.screenshot({ path: join(shots, '11-ask-meetings.png') });
+  await lib.locator('.ask-sources .chip').first().click();
+  await lib.getByRole('tab', { name: 'Minutes' }).waitFor();
+  check(true, 'asking your meetings answers with a link to the meeting');
+
+  // A second meeting: Bolo now knows the first one and answers from its minutes.
+  await page.getByRole('button', { name: 'Start' }).click();
+  await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
+  await page.getByLabel('Ask Bolo').fill('what did they want on whatsapp?');
+  await page.getByLabel('Ask Bolo').press('Enter');
+  await page.getByText('Answer · from past meetings').waitFor({ timeout: 8000 });
+  await page.locator('.answer .chip-meeting', { hasText: 'Blue 5 litre stock and rate' }).waitFor();
+  check(true, "a later meeting answers from the first meeting's minutes");
+  await shot('12-past-meeting-answer');
+  await page.getByTitle('Stop the call and save').click();
+  await page.getByText(/^Meeting saved/).waitFor({ timeout: 20000 });
 
   check(
     gnani.connections.every((c) => c.badFrames === 0) && gnani.connections.length >= 2,

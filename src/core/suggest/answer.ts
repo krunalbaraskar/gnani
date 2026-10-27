@@ -3,7 +3,15 @@
  * the facts came from, and whether its numbers really appear in what was sent.
  */
 
-export type Verdict = 'files' | 'call' | 'reply' | 'missing' | 'unverified' | 'screen';
+export type Verdict =
+  | 'files'
+  | 'call'
+  | 'reply'
+  | 'missing'
+  | 'unverified'
+  | 'screen'
+  // A "Catch me up" recap whose figures all appear in the transcript.
+  | 'recap';
 
 // The tag ends a line. Models also put it after the reply on the same line, or in bold.
 const SOURCE_TAG = /[*_`]*\[\s*sources?\s*:\s*([^\]]*)\][*_`.]*\s*$/i;

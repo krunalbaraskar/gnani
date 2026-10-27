@@ -20,12 +20,16 @@ import {
   toDetail,
   toSummary,
 } from './store.ts';
-import { tokenize } from '../context/context.ts';
+import { tokenize, type Chunk } from '../context/context.ts';
+import { askMeetings, type MeetingAnswer } from './ask.ts';
+import { meetingChunks } from './memory.ts';
 
 export type MeetingEvent =
   | { type: 'meeting-updated'; summary: MeetingSummary }
   | { type: 'meeting-deleted'; id: string }
-  | { type: 'minutes-progress'; id: string; progress: MinutesProgressView };
+  | { type: 'minutes-progress'; id: string; progress: MinutesProgressView }
+  // Past meetings answers can now draw on.
+  | { type: 'memory-updated'; meetings: number };
 
 export interface MeetingServiceDeps {
   store: MeetingStore;
@@ -46,6 +50,8 @@ export class MeetingService {
   private readonly now: () => number;
   private readonly log: Logger;
   private readonly writing = new Map<string, AbortController>();
+  private memoryChunks: Chunk[] = [];
+  private memoryRun = 0;
 
   constructor(deps: MeetingServiceDeps) {
     this.deps = deps;
@@ -103,7 +109,10 @@ export class MeetingService {
   async delete(id: string): Promise<boolean> {
     this.writing.get(id)?.abort();
     const ok = await this.deps.store.delete(id);
-    if (ok) this.deps.emit({ type: 'meeting-deleted', id });
+    if (ok) {
+      this.deps.emit({ type: 'meeting-deleted', id });
+      void this.refreshMemory();
+    }
     return ok;
   }
 
@@ -169,7 +178,35 @@ export class MeetingService {
     this.writing.get(id)?.abort();
   }
 
+  /**
+   * Minutes and notes of past meetings, as answer chunks. Kept ready (answers are built
+   * synchronously during a call) and rebuilt whenever a meeting changes.
+   */
+  get memory(): readonly Chunk[] {
+    return this.memoryChunks;
+  }
+
+  async refreshMemory(): Promise<void> {
+    const run = ++this.memoryRun;
+    const chunks = meetingChunks(await this.deps.store.all());
+    if (run !== this.memoryRun) return;
+    this.memoryChunks = chunks;
+    this.deps.emit({ type: 'memory-updated', meetings: new Set(chunks.map((c) => c.file)).size });
+  }
+
+  /** "Ask your meetings" from the library. */
+  async ask(
+    question: string,
+    opts: { budget: number; signal?: AbortSignal; onText?: (text: string) => void },
+  ): Promise<MeetingAnswer> {
+    return askMeetings(this.deps.llm(), await this.deps.store.all(), question, {
+      ...opts,
+      myName: this.deps.writer().myName,
+    });
+  }
+
   private changed(m: StoredMeeting): void {
     this.deps.emit({ type: 'meeting-updated', summary: toSummary(m, this.isWriting(m.id)) });
+    void this.refreshMemory();
   }
 }

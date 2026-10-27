@@ -189,7 +189,29 @@ describe('MeetingService', () => {
     expect(await service.delete(m.id)).toBe(true);
     await writing;
     expect(await service.detail(m.id)).toBeNull();
-    expect(events.at(-1)).toEqual({ type: 'meeting-deleted', id: m.id });
+    expect(events).toContainEqual({ type: 'meeting-deleted', id: m.id });
+    await waitFor(() => events.at(-1)?.type === 'memory-updated', 500, 'memory rebuilt');
+    expect(service.memory).toEqual([]);
     expect(await service.list()).toEqual([]);
+  });
+});
+
+describe('MeetingService memory', () => {
+  it('keeps past minutes ready for answers and reports how many meetings it holds', async () => {
+    const events: MeetingEvent[] = [];
+    const service = new MeetingService({
+      store: new MeetingStore(tempDir()),
+      llm: () => llm(),
+      writer: () => ({ myName: '', language: 'English' }),
+      emit: (e) => events.push(e),
+    });
+    const m = await service.saveRecord(record(T0, ['We agreed on the price.']));
+    await service.writeMinutes(m.id);
+    await waitFor(() => service.memory.length > 0, 500, 'memory');
+    expect(service.memory[0]!.file).toMatch(/^meeting \d{4}-\d\d-\d\d Pricing review$/);
+    expect(events.filter((e) => e.type === 'memory-updated').at(-1)).toEqual({
+      type: 'memory-updated',
+      meetings: 1,
+    });
   });
 });

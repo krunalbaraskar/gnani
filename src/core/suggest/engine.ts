@@ -2,7 +2,13 @@ import { LlmError, type LlmProvider } from '../llm/types.ts';
 import type { Logger } from '../util/logger.ts';
 import { silentLogger } from '../util/logger.ts';
 import { groundText } from '../context/context.ts';
-import { decideVerdict, splitSource, visibleWhileStreaming, type Verdict } from './answer.ts';
+import {
+  decideVerdict,
+  numbersGrounded,
+  splitSource,
+  visibleWhileStreaming,
+  type Verdict,
+} from './answer.ts';
 import {
   buildSuggestionMessages,
   cleanSuggestion,
@@ -189,9 +195,14 @@ export class SuggestionEngine {
     }
 
     const { text, cited } = splitSource(raw);
-    // Call replies are trimmed to 3 spoken lines; a screen answer is kept whole (code).
-    s.text = req.image ? text.trim() : cleanSuggestion(text);
-    if (!s.error && !s.cancelled) {
+    const recap = req.trigger === 'catchup';
+    // Call replies are trimmed to 3 spoken lines; a screen answer (code) or a recap is kept whole.
+    s.text = req.image || recap ? text.trim() : cleanSuggestion(text);
+    if (!s.error && !s.cancelled && recap) {
+      const said = req.segments.map((seg) => seg.text);
+      s.verdict = numbersGrounded(s.text, said) ? 'recap' : 'unverified';
+      s.sources = [];
+    } else if (!s.error && !s.cancelled) {
       const chunks = req.chunks ?? [];
       const { verdict, sources } = decideVerdict({
         text: s.text,

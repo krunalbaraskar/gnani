@@ -15,6 +15,8 @@ export interface TranscriptSegment {
   serverLatencyMs?: number;
   /** Measured: transcript arrival minus the last voiced frame we sent. */
   endToEndLatencyMs?: number;
+  /** Watch words (or the user's name) said in this line. */
+  mentions?: string[];
   /** Plain meaning in the user's language, when the line mixes in other languages. */
   meaning?: string;
 }

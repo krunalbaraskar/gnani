@@ -9,8 +9,9 @@ export function ConsentNotice({ onAccept, sttName }: { onAccept: () => void; stt
         replies.
       </p>
       <p>
-        The contents of your context folder are sent to that AI model to answer questions. A picture
-        of your screen is sent to it each time you ask with the screen, and only then.
+        The parts of your context folder and of your past meetings&apos; minutes that match a
+        question are sent to that AI model to answer it. A picture of your screen is sent to it each
+        time you ask with the screen, and only then.
       </p>
       <p>
         <strong>

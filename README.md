@@ -13,9 +13,14 @@ handles Hindi, Tamil and other Indian languages and code-mixed speech like Hingl
 answers when you ask · **Active**: also answers their questions on its own), with a
 **pause** button for anything off the record:
 
-- **Answers from your files.** Point it at a folder with your stock sheet, price list or
-  project notes. When they ask a question, Bolo answers from those files and names the
-  file. If the fact is not there, it says so; it does not make up a number.
+- **Answers from your files and your past meetings.** Point it at a folder with your stock
+  sheet, price list or project notes; the minutes of every earlier meeting count too. When
+  they ask a question, Bolo answers from those and names the file or meeting. If the fact
+  is not there, it says so; it does not make up a number.
+- **Catches you up.** Drifted off? One hotkey gives you the last 10 minutes in a few
+  bullets, starting with anything they asked you.
+- **Alerts you when they say your name** or a word you watch for (a project, a client),
+  even in Silent mode. A question for you brings the hidden overlay back.
 - **Stays out of the screen share.** The overlay is excluded from screen capture, so the
   people you are sharing with do not see it.
 - **Explains mixed-language lines.** Under a line that mixes in words you may not know,
@@ -31,6 +36,8 @@ answers when you ask · **Active**: also answers their questions on its own), wi
 - **A meeting library.** Every meeting with its transcript, Bolo's answers, your notes and
   the minutes, searchable across all meetings. Edit the minutes, then copy them for email
   or chat, open them in your mail app, or save them as PDF or Markdown.
+- **Ask your meetings.** "What rate did we agree with Mehta?" is answered from all your
+  saved meetings, with a link to the one it came from.
 
 Built for sales reps, small business owners, brokers, agents and anyone who takes meetings
 in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
@@ -68,8 +75,9 @@ Checked on Windows 11 (build 26100) on 2026-10-09.
 | Answers: source parsing, number check, labels, trigger precedence | Done, unit-tested                                                                                                                              |
 | Meaning line for mixed-language speech                            | Done, unit-tested                                                                                                                              |
 | Modes (Silent / Assist / Active) and pause                        | Done, unit-tested                                                                                                                              |
+| Past meetings in answers, ask your meetings, catch-up, alerts     | Done, unit-tested and end to end with the mock model (2026-10-26)                                                                              |
 | Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested; minutes not yet written by a real model, only the mock (2026-10-26)                                                         |
-| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-26) against the mock Gnani and mock AI servers: 40 checks, `npm run test:e2e`                                   |
+| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-26) against the mock Gnani and mock AI servers: 44 checks, `npm run test:e2e`                                   |
 | Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                 |
 | Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share              |
 | Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                             |
@@ -216,6 +224,7 @@ key, the transcript and your files travel in that request.
 | ------------------ | ----------------------------------------------- |
 | `Ctrl+Shift+Space` | Answer what they just said, from any app        |
 | `Ctrl+Alt+Space`   | Answer from my screen (needs a vision model)    |
+| `Ctrl+Shift+U`     | Catch me up: the last 10 minutes in bullets     |
 | `Ctrl+Shift+H`     | Show / hide the overlay (doesn't steal focus)   |
 | `Ctrl+Shift+M`     | Click-through: mouse goes to the app underneath |
 
@@ -240,6 +249,17 @@ background. Click the "Meeting saved" notice, or **⋯ → Meetings**, to open t
 Set **Context → My name** so the minutes say who you are. Add notes in **Notes & answers**
 and press **Rewrite** to include them. Turn automatic minutes off under **Settings → After
 the meeting**; the old export to a folder (.md + .json transcript) is there too.
+
+**Past meetings in answers.** The minutes and notes of your 40 newest meetings are used
+like files in the context folder: the parts that match a question go to your AI model, and
+an answer that uses them says **Answer · from past meetings** with the meeting as its
+source. Turn it off in **Context**. In the library, type a question in the search box and
+press Enter to **ask your meetings**; transcripts are searched too.
+
+**Alerts.** Set **Context → My name** and **Alert me on** (comma-separated). When they say
+one, a strip shows the line; if it was a question, an **Answer** button, and a hidden
+overlay comes back. Speech-to-text may write names in another script (Hindi writes Krunal
+as क्रुणाल), so add that spelling as a watch word. Matching is plain text, no AI.
 
 **The shield** is green and reads "Hidden from screen share" only on a Windows build
 where that was checked. Anywhere else it is amber: "May be visible when sharing".
@@ -526,9 +546,10 @@ src/
     context/         reference files: decode, chunk, select
     suggest/         prompt builder, answer checks, SuggestionEngine
     gloss/           meaning line for mixed-language speech
-    session/         CopilotSession (modes, pause), export
+    session/         CopilotSession (modes, pause, catch-up), name/watch-word alerts, export
     minutes/         minutes of the meeting: prompts, long-meeting map/reduce, figure check, PDF page
-    meetings/        meeting library: file store, search, MeetingService
+    meetings/        meeting library: file store, search, MeetingService, past meetings
+                     as answer context, "ask your meetings"
   main/              Electron main: overlay + library windows, hotkeys, IPC, permissions,
                      settings store, context folder loader, screen capture, PDF export
   preload/           contextBridge API

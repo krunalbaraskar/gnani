@@ -111,6 +111,7 @@ export class SessionController {
         onSuggestionToken: (id, _t, text) => emit({ type: 'suggestion-token', id, text }),
         onSuggestionDone: (suggestion) => emit({ type: 'suggestion-done', suggestion }),
         onMeaning: (id, meaning) => emit({ type: 'segment-meaning', id, meaning }),
+        onMention: (mention) => emit({ type: 'mention', mention }),
       },
     });
     session.start();
@@ -148,6 +149,10 @@ export class SessionController {
     if (!session) return;
     const image = await this.capture(capture);
     if (image) void session.askScreen(image);
+  }
+
+  catchUp(): void {
+    void this.active()?.catchUp();
   }
 
   requestMeaning(id: string): void {

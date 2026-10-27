@@ -410,3 +410,78 @@ button.primary:hover:not(:disabled) {
     padding-right: 16px;
   }
 }
+
+/* Ask your meetings */
+.lib-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 12px 8px;
+  padding: 7px 10px;
+  text-align: left;
+  border-radius: 8px;
+  color: var(--accent);
+  background: rgba(138, 184, 255, 0.08);
+  border: 1px solid rgba(138, 184, 255, 0.25);
+}
+.lib-ask span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lib-ask em {
+  color: var(--text);
+  font-style: normal;
+}
+.ask-question {
+  margin: 0;
+  font-size: 20px;
+}
+.ask-answer {
+  max-width: 760px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  margin-bottom: 10px;
+}
+.ask-answer.ask-files,
+.ask-answer.ask-call {
+  border-color: rgba(98, 214, 160, 0.4);
+}
+.ask-answer.ask-unverified,
+.ask-answer.ask-missing {
+  border-color: rgba(246, 180, 85, 0.4);
+}
+.ask-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ask-files .ask-label,
+.ask-call .ask-label {
+  color: var(--ok);
+}
+.ask-unverified .ask-label,
+.ask-missing .ask-label {
+  color: var(--warn);
+}
+.ask-text {
+  margin: 6px 0;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.ask-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ask-sources .chip {
+  cursor: pointer;
+}
+.tline.mentioned .text {
+  box-shadow: inset 3px 0 0 var(--warn);
+  padding-left: 8px;
+}

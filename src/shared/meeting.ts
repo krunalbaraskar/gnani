@@ -54,3 +54,10 @@ export function defaultMeetingTitle(startedAt: number): string {
   const d = new Date(startedAt);
   return `Meeting · ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
 }
+
+/** "Ask your meetings": the answer and the meetings it came from. */
+export interface MeetingAnswerView {
+  text: string;
+  verdict: 'files' | 'call' | 'reply' | 'missing' | 'unverified' | 'screen' | 'recap';
+  sources: { name: string; meetingId: string }[];
+}

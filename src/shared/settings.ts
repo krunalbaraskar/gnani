@@ -17,6 +17,13 @@ export interface Settings {
   myName: string;
   /** Write the minutes as soon as a meeting ends. */
   autoMinutes: boolean;
+  /** Answers may also come from the minutes and notes of past meetings. */
+  useMeetings: boolean;
+  /**
+   * Comma-separated words that raise an alert when they say them (projects, clients, other
+   * spellings of my name). My name always counts.
+   */
+  watchWords: string;
   /** Gnani language code (see GNANI_LANGUAGES). */
   sttLanguage: string;
   /** Numbers, currency and dates as digits (Gnani ITN; Hindi and English only). */
@@ -60,13 +67,18 @@ export interface Settings {
   llmVisionModel: string;
 }
 
-/** Bumped when the consent notice starts disclosing something new (2: files and screen; 3: meeting library and minutes). */
-export const CONSENT_VERSION = 3;
+/**
+ * Bumped when the consent notice starts disclosing something new (2: files and screen;
+ * 3: meeting library and minutes; 4: past meetings in answers).
+ */
+export const CONSENT_VERSION = 4;
 
 export const DEFAULT_SETTINGS: Settings = {
   mode: 'active',
   myName: '',
   autoMinutes: true,
+  useMeetings: true,
+  watchWords: '',
   sttLanguage: 'hi-IN',
   formatNumbers: false,
   outputLanguage: 'same',
@@ -136,6 +148,12 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
     ),
     myName: pick(i['myName'], d.myName, (v) => isString(v) && (v as string).length <= 80),
     autoMinutes: pick(i['autoMinutes'], d.autoMinutes, isBool),
+    useMeetings: pick(i['useMeetings'], d.useMeetings, isBool),
+    watchWords: pick(
+      i['watchWords'],
+      d.watchWords,
+      (v) => isString(v) && (v as string).length <= 300,
+    ),
     sttLanguage: pick(
       i['sttLanguage'],
       d.sttLanguage,

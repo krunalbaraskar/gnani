@@ -694,3 +694,36 @@ label.inline input {
   align-items: center;
   gap: 5px;
 }
+
+/* ---- Mentions and past meetings ---- */
+.strip.mention {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-color: rgba(246, 180, 85, 0.5);
+  animation: mention-in 0.9s ease-out 2;
+}
+.strip.mention.asked {
+  background: rgba(70, 48, 14, 0.95);
+}
+.mention-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-text strong {
+  color: var(--warn);
+}
+@keyframes mention-in {
+  50% {
+    box-shadow: 0 0 0 3px rgba(246, 180, 85, 0.45);
+  }
+}
+.line.mentioned {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.chip.chip-meeting {
+  color: var(--accent);
+}

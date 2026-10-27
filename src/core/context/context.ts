@@ -134,7 +134,7 @@ function chunkTable(name: string, text: string): Chunk[] {
   return chunks;
 }
 
-function chunkText(name: string, text: string): Chunk[] {
+export function chunkText(name: string, text: string): Chunk[] {
   const pieces: string[] = [];
   for (const block of text.replace(/\r\n?/g, '\n').split(/\n\s*\n/)) {
     let piece = '';

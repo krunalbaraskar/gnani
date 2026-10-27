@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { markdownToHtml } from '../../../shared/markdown.ts';
 import type {
+  MeetingAnswerView,
   MeetingDetail,
   MeetingSummary,
   MinutesProgressView,
@@ -49,6 +50,17 @@ function Rendered({ markdown }: { markdown: string }) {
   return <div className="doc" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+/** A question asked of all meetings, while it streams and once it is answered. */
+interface AskState {
+  askId: number;
+  question: string;
+  text: string;
+  answer?: MeetingAnswerView;
+  error?: string;
+}
+
+let asks = 0;
+
 export function Library() {
   const [list, setList] = useState<MeetingSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -58,9 +70,12 @@ export function Library() {
   const [progress, setProgress] = useState<Record<string, MinutesProgressView>>({});
   const [tab, setTab] = useState<Tab>('minutes');
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
-  const queryRef = useRef(query);
+  const [ask, setAsk] = useState<AskState | null>(null);
+  // While an answer to a question is shown, the list shows every meeting, not search hits.
+  const listQuery = ask ? '' : query;
+  const queryRef = useRef(listQuery);
   const selectedRef = useRef(selected);
-  queryRef.current = query;
+  queryRef.current = listQuery;
   selectedRef.current = selected;
 
   const refreshList = useCallback(async () => {
@@ -72,9 +87,9 @@ export function Library() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => void refreshList(), query ? 180 : 0);
+    const t = setTimeout(() => void refreshList(), listQuery ? 180 : 0);
     return () => clearTimeout(t);
-  }, [query, refreshList]);
+  }, [listQuery, refreshList]);
 
   useEffect(() => {
     void refreshDetail(selected);
@@ -83,8 +98,8 @@ export function Library() {
 
   // Open the newest meeting when nothing was asked for.
   useEffect(() => {
-    if (!selected && !query && list[0]) setSelected(list[0].id);
-  }, [list, selected, query]);
+    if (!selected && !listQuery && list[0]) setSelected(list[0].id);
+  }, [list, selected, listQuery]);
 
   useEffect(
     () =>
@@ -110,6 +125,9 @@ export function Library() {
           case 'notice':
             setToast({ text: e.message, error: e.level === 'error' });
             break;
+          case 'ask-progress':
+            setAsk((a) => (a?.askId === e.askId && !a.answer ? { ...a, text: e.text } : a));
+            break;
         }
       }),
     [refreshList, refreshDetail],
@@ -121,34 +139,65 @@ export function Library() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  const startAsk = async () => {
+    const question = query.trim();
+    if (!question) return;
+    const askId = ++asks;
+    setAsk({ askId, question, text: '' });
+    const r = await window.bolo.askMeetings(question, askId);
+    setAsk((a) =>
+      a?.askId !== askId ? a : 'error' in r ? { ...a, error: r.error } : { ...a, answer: r },
+    );
+  };
+  const open = (id: string) => {
+    setAsk(null);
+    setSelected(id);
+  };
+
   const groups = useMemo(() => {
     const out: { label: string; items: MeetingSummary[] }[] = [];
     for (const m of list) {
       // Search results are ordered by relevance, so they are not grouped by day.
-      const label = query ? 'Results' : dayLabel(m.startedAt);
+      const label = listQuery ? 'Results' : dayLabel(m.startedAt);
       if (out.at(-1)?.label === label) out.at(-1)!.items.push(m);
       else out.push({ label, items: [m] });
     }
     return out;
-  }, [list, query]);
+  }, [list, listQuery]);
 
   return (
     <div className="library">
       <aside className="lib-side">
-        <div className="lib-search">
+        <form
+          className="lib-search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void startAsk();
+          }}
+        >
           <Icon name="search" size={14} />
           <input
             type="search"
-            placeholder="Search meetings, minutes, transcripts"
+            placeholder="Search, or ask your meetings + Enter"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search meetings"
           />
-        </div>
+        </form>
+        {query.trim() && (
+          <button className="lib-ask" onClick={() => void startAsk()}>
+            <Icon name="sparkle" size={14} />
+            <span>
+              Ask your meetings: <em>{query.trim()}</em>
+            </span>
+          </button>
+        )}
         <nav className="lib-list" aria-label="Meetings">
           {loaded && list.length === 0 && (
             <p className="muted lib-empty-list">
-              {query ? 'No meeting mentions that.' : 'No meetings yet.'}
+              {listQuery
+                ? 'No meeting mentions all of that. Press Enter to ask your meetings instead.'
+                : 'No meetings yet.'}
             </p>
           )}
           {groups.map((g) => (
@@ -158,8 +207,8 @@ export function Library() {
                 <button
                   key={m.id}
                   className={`lib-item ${m.id === selected ? 'on' : ''}`}
-                  onClick={() => setSelected(m.id)}
-                  aria-current={m.id === selected}
+                  onClick={() => open(m.id)}
+                  aria-current={!ask && m.id === selected}
                 >
                   <span className="lib-item-title">{m.title}</span>
                   <span className="lib-item-meta">
@@ -181,7 +230,9 @@ export function Library() {
       </aside>
 
       <main className="lib-main">
-        {detail ? (
+        {ask ? (
+          <AskPane ask={ask} onOpen={open} onClose={() => setAsk(null)} />
+        ) : detail ? (
           <MeetingView
             key={detail.id}
             m={detail}
@@ -212,6 +263,67 @@ export function Library() {
         </div>
       )}
     </div>
+  );
+}
+
+const ASK_LABEL: Record<MeetingAnswerView['verdict'], string> = {
+  files: 'From your meetings',
+  call: 'From your meetings',
+  recap: 'From your meetings',
+  screen: 'Answer',
+  reply: 'Answer',
+  missing: 'Not in your meetings',
+  unverified: 'Check this figure: a number here is not in your meetings',
+};
+
+function AskPane({
+  ask,
+  onOpen,
+  onClose,
+}: {
+  ask: AskState;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+}) {
+  const a = ask.answer;
+  return (
+    <article className="meeting ask-pane">
+      <header className="meeting-head">
+        <h1 className="ask-question">{ask.question}</h1>
+        <button className="ghost small" onClick={onClose}>
+          <Icon name="close" size={14} /> Close
+        </button>
+        <div className="meeting-meta muted">Asked of all your saved meetings</div>
+      </header>
+      <div className="meeting-body">
+        <section className={`ask-answer ${a ? `ask-${a.verdict}` : ''}`} aria-live="polite">
+          <span className="ask-label">
+            {ask.error ? 'Could not answer' : a ? ASK_LABEL[a.verdict] : 'Reading your meetings…'}
+          </span>
+          {ask.error ? (
+            <p className="error-text">{ask.error}</p>
+          ) : (
+            <p className="ask-text">
+              {a?.text ?? ask.text}
+              {!a && <span className="caret" />}
+            </p>
+          )}
+          {!!a?.sources.length && (
+            <div className="ask-sources">
+              {a.sources.map((s) => (
+                <button key={s.meetingId} className="chip" onClick={() => onOpen(s.meetingId)}>
+                  {s.name.replace(/^meeting /, '')}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+        <p className="muted small">
+          Bolo sends the parts of your meetings that match the question to your AI model, and checks
+          every figure in the answer against them.
+        </p>
+      </div>
+    </article>
   );
 }
 
@@ -459,7 +571,10 @@ function TranscriptPane({ m }: { m: MeetingDetail }) {
     <div className="lib-transcript">
       {items.map((it, i) =>
         it.kind === 'line' ? (
-          <div key={it.seg.id} className={`tline ${it.seg.speaker}`}>
+          <div
+            key={it.seg.id}
+            className={`tline ${it.seg.speaker} ${it.seg.mentions ? 'mentioned' : ''}`}
+          >
             <span className="t">{formatClock(it.at - m.startedAt)}</span>
             <span className="who">{it.seg.speaker === 'me' ? 'Me' : 'Them'}</span>
             <span className="text">

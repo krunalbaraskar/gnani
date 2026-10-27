@@ -9,7 +9,12 @@ import type {
   StopResult,
   WindowCommand,
 } from '../shared/ipc.ts';
-import type { MeetingDetail, MeetingPatch, MeetingSummary } from '../shared/meeting.ts';
+import type {
+  MeetingAnswerView,
+  MeetingDetail,
+  MeetingPatch,
+  MeetingSummary,
+} from '../shared/meeting.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Speaker } from '../shared/transcript/types.ts';
 
@@ -30,6 +35,10 @@ export interface BoloApi {
   ask(text: string, withScreen: boolean): void;
   askScreen(): void;
   requestMeaning(segmentId: string): void;
+  /** A recap of the last few minutes, shown in the answer card. */
+  catchUp(): void;
+  /** "Ask your meetings": progress arrives as ask-progress events with this askId. */
+  askMeetings(question: string, askId: number): Promise<MeetingAnswerView | { error: string }>;
   /** Off the record: stop sending audio to speech-to-text until resumed. */
   setPaused(paused: boolean): void;
   /** Opens (or focuses) the meeting library, optionally at one meeting. */

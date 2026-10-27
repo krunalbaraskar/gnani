@@ -19,6 +19,7 @@ const app: AppState = {
   clickThrough: false,
   sessionRunning: false,
   sessionPaused: false,
+  memoryMeetings: 0,
   demoAudioDir: '/tmp/demo',
   context: { dir: '', files: [], skipped: [] },
   shareProtection: 'unverified',

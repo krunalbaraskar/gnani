@@ -17,6 +17,8 @@ export const IPC = {
   ask: 'bolo:ask',
   askScreen: 'bolo:ask-screen',
   requestMeaning: 'bolo:request-meaning',
+  catchUp: 'bolo:catch-up',
+  askMeetings: 'bolo:ask-meetings',
   setPaused: 'bolo:set-paused',
   openLibrary: 'bolo:open-library',
   listMeetings: 'bolo:list-meetings',
@@ -75,12 +77,14 @@ export interface AppState {
   /** Where demo WAVs are looked for (see npm run demo-audio). */
   demoAudioDir: string;
   context: ContextView;
+  /** Past meetings whose minutes or notes answers can use (when useMeetings is on). */
+  memoryMeetings: number;
   shareProtection: ShareProtection;
 }
 
 export interface SuggestionView {
   id: string;
-  trigger: 'hotkey' | 'auto' | 'typed' | 'screen';
+  trigger: 'hotkey' | 'auto' | 'typed' | 'screen' | 'catchup';
   question?: string;
   /** The question the user typed, if any. */
   asked?: string;
@@ -91,7 +95,7 @@ export interface SuggestionView {
   error?: string;
   cancelled?: boolean;
   /** Set when the answer has finished: how far it can be trusted. */
-  verdict?: 'files' | 'call' | 'reply' | 'missing' | 'unverified' | 'screen';
+  verdict?: 'files' | 'call' | 'reply' | 'missing' | 'unverified' | 'screen' | 'recap';
   sources?: string[];
   usedScreen?: boolean;
 }
@@ -109,6 +113,7 @@ export type BoloEvent =
   | { type: 'segment'; segment: TranscriptSegment }
   | { type: 'segment-removed'; id: string; reason: 'echo' }
   | { type: 'segment-meaning'; id: string; meaning: string }
+  | { type: 'mention'; mention: MentionView }
   | { type: 'context'; context: ContextView }
   | { type: 'partial'; speaker: Speaker; text: string }
   | { type: 'processing'; speaker: Speaker }
@@ -124,7 +129,9 @@ export type BoloEvent =
   | { type: 'meeting-updated'; summary: MeetingSummary }
   | { type: 'meeting-deleted'; id: string }
   | { type: 'minutes-progress'; id: string; progress: MinutesProgressView }
-  | { type: 'open-meeting'; id: string };
+  | { type: 'open-meeting'; id: string }
+  | { type: 'ask-progress'; askId: number; text: string }
+  | { type: 'memory-updated'; meetings: number };
 
 export type StartResult = { ok: true } | { ok: false; error: string };
 
@@ -151,4 +158,14 @@ export type WindowCommand =
 export interface DemoAudio {
   me: ArrayBuffer | null;
   them: ArrayBuffer | null;
+}
+
+/** They said the user's name or a watch word (see core/session/mentions.ts). */
+export interface MentionView {
+  segmentId: string;
+  text: string;
+  terms: string[];
+  /** It sounded like a question. */
+  asked: boolean;
+  at: number;
 }

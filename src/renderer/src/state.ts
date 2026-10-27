@@ -1,5 +1,11 @@
 /** Overlay UI state. A pure reducer, so it is unit-tested in Node. */
-import type { AppState, BoloEvent, SttStatusView, SuggestionView } from '../../shared/ipc.ts';
+import type {
+  AppState,
+  BoloEvent,
+  MentionView,
+  SttStatusView,
+  SuggestionView,
+} from '../../shared/ipc.ts';
 import type { Settings } from '../../shared/settings.ts';
 import type { Speaker, TranscriptSegment } from '../../shared/transcript/types.ts';
 
@@ -32,6 +38,8 @@ export interface UiState {
   clickThrough: boolean;
   echoesRemoved: number;
   notice: Notice | null;
+  /** They just said my name or a watch word. */
+  mention: MentionView | null;
   /** Which tab the panel shows. */
   panel: Tab;
   /** Whether the panel under the bar is expanded. */
@@ -48,6 +56,7 @@ export type UiAction =
   | { type: 'level'; speaker: Speaker; level: number }
   | { type: 'notice'; level: 'info' | 'error'; message: string; meetingId?: string }
   | { type: 'dismiss-notice' }
+  | { type: 'dismiss-mention' }
   | { type: 'panel'; panel: Tab }
   | { type: 'toggle-open' }
   | { type: 'clear-transcript' };
@@ -70,6 +79,7 @@ export const initialUiState: UiState = {
   clickThrough: false,
   echoesRemoved: 0,
   notice: null,
+  mention: null,
   panel: 'live',
   open: false,
 };
@@ -98,6 +108,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
         segments: [],
         suggestion: null,
         echoesRemoved: 0,
+        mention: null,
         partial: { me: '', them: '' },
         latency: { me: {}, them: {} },
       };
@@ -125,6 +136,8 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
           meetingId: action.meetingId,
         },
       };
+    case 'dismiss-mention':
+      return { ...state, mention: null };
     case 'dismiss-notice':
       return { ...state, notice: null };
     case 'panel':
@@ -155,6 +168,8 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
         processing: { ...state.processing, [s.speaker]: false },
       };
     }
+    case 'mention':
+      return { ...state, mention: e.mention };
     case 'segment-meaning':
       return {
         ...state,
@@ -230,7 +245,10 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
     case 'meeting-deleted':
     case 'minutes-progress':
     case 'open-meeting':
+    case 'ask-progress':
       return state; // for the library window
+    case 'memory-updated':
+      return state.app ? { ...state, app: { ...state.app, memoryMeetings: e.meetings } } : state;
   }
 }
 

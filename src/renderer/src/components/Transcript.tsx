@@ -14,9 +14,13 @@ export function Line({ segment: s, when }: { segment: TranscriptSegment; when?: 
   const them = s.speaker === 'them';
   return (
     <div
-      className={`line line-${s.speaker} ${them ? 'clickable' : ''}`}
+      className={`line line-${s.speaker} ${them ? 'clickable' : ''} ${s.mentions ? 'mentioned' : ''}`}
       onClick={them ? () => window.bolo.requestMeaning(s.id) : undefined}
-      title={them ? 'Click to explain this line' : undefined}
+      title={
+        them
+          ? `${s.mentions ? `Mentions ${s.mentions.join(', ')}. ` : ''}Click to explain this line`
+          : undefined
+      }
     >
       <span className="who">{them ? 'Them' : 'Me'}</span>
       <span className="text" lang="und">

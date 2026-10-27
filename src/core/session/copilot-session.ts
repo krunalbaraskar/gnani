@@ -8,6 +8,8 @@ import { selectChunks, type LoadedContext } from '../context/context.ts';
 import { GlossEngine } from '../gloss/engine.ts';
 import type { LlmProvider } from '../llm/types.ts';
 import { SuggestionEngine, type Suggestion, type SuggestRequest } from '../suggest/engine.ts';
+import { CATCHUP_MINUTES } from '../suggest/prompt.ts';
+import { findMentions, watchTerms } from './mentions.ts';
 import type { SttProvider, SttStatus, SttStream, SttTranscript } from '../stt/types.ts';
 import { type Logger, silentLogger } from '../util/logger.ts';
 import type { SessionRecord } from './types.ts';
@@ -25,6 +27,16 @@ export interface SessionEvents {
   onSuggestionToken(id: string, token: string, textSoFar: string): void;
   onSuggestionDone(s: Suggestion): void;
   onMeaning?(id: string, meaning: string): void;
+  /** They said the user's name or a watch word. `asked`: and it sounded like a question. */
+  onMention?(m: Mention): void;
+}
+
+export interface Mention {
+  segmentId: string;
+  text: string;
+  terms: string[];
+  asked: boolean;
+  at: number;
 }
 
 export interface CopilotSessionDeps {
@@ -170,6 +182,19 @@ export class CopilotSession {
     });
   }
 
+  /** "Catch me up": a recap of the last few minutes. Runs in every mode: the user asked. */
+  catchUp(): Promise<Suggestion | null> {
+    if (!this.running) return Promise.resolve(null);
+    const s = this.deps.settings();
+    return this.engine.request({
+      segments: this.transcript.getRecent(CATCHUP_MINUTES, this.now()),
+      contextNote: s.contextNote,
+      outputLanguage: s.outputLanguage,
+      trigger: 'catchup',
+      myName: s.myName,
+    });
+  }
+
   /** "Answer from my screen": no typed question, just the screenshot. */
   askScreen(image: string): Promise<Suggestion | null> {
     if (!this.running) return Promise.resolve(null);
@@ -248,8 +273,24 @@ export class CopilotSession {
       }
     }
 
+    const mentioned =
+      seg.speaker === 'them'
+        ? findMentions(seg.text, watchTerms(settings.myName, settings.watchWords))
+        : [];
+    if (mentioned.length) seg.mentions = mentioned;
+
     this.transcript.add(seg);
     this.deps.events.onSegment(seg);
+
+    if (mentioned.length) {
+      this.deps.events.onMention?.({
+        segmentId: seg.id,
+        text: seg.text,
+        terms: mentioned,
+        asked: detectQuestion(seg.text).isQuestion,
+        at: seg.at,
+      });
+    }
 
     // Silent mode makes no AI request the user did not ask for.
     if (seg.speaker === 'them' && settings.mode !== 'silent' && settings.explainThem) {

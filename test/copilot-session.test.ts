@@ -313,3 +313,65 @@ describe('CopilotSession modes and pause', () => {
     expect(session.isPaused).toBe(false);
   });
 });
+
+describe('CopilotSession mentions and catch-up', () => {
+  it('flags their lines that say my name or a watch word, in every mode', async () => {
+    const { fake, emit } = fakeStt();
+    const mentions: unknown[] = [];
+    const session = new CopilotSession({
+      stt: fake,
+      llm: () => {
+        throw new Error('unused');
+      },
+      settings: () => ({
+        ...DEFAULT_SETTINGS,
+        mode: 'silent',
+        myName: 'Krunal',
+        watchWords: 'Atlas',
+      }),
+      events: { ...recordEvents().events, onMention: (m) => mentions.push(m) },
+    });
+    session.start();
+    emit('them', 'Krunal, can you share the Atlas numbers?');
+    emit('them', 'Theek hai.');
+    emit('me', 'Krunal here'); // my own words never alert me
+    expect(mentions).toEqual([
+      expect.objectContaining({
+        text: 'Krunal, can you share the Atlas numbers?',
+        terms: ['Krunal', 'Atlas'],
+        asked: true,
+      }),
+    ]);
+    expect(session.transcript.all()[0]!.mentions).toEqual(['Krunal', 'Atlas']);
+    await session.stop();
+  });
+
+  it('catches the user up from the recent transcript, checking figures, even in silent mode', async () => {
+    const { fake, emit } = fakeStt();
+    const requests: string[] = [];
+    const reply = ['- Asked you: send 40 boxes by Friday\n- Discussing the order'];
+    const session = new CopilotSession({
+      stt: fake,
+      llm: () => ({
+        name: 'fake',
+        async *streamChat(req) {
+          requests.push(JSON.stringify(req.messages));
+          yield reply[0]!;
+        },
+      }),
+      settings: () => ({ ...DEFAULT_SETTINGS, mode: 'silent', myName: 'Asha' }),
+      events: recordEvents().events,
+    });
+    session.start();
+    emit('them', 'Asha, can you send 40 boxes by Friday?');
+    const s = await session.catchUp();
+    expect(s).toMatchObject({ trigger: 'catchup', verdict: 'recap' });
+    expect(s?.text).toBe(reply[0]); // bullets kept whole
+    expect(requests[0]).toContain('lost track of it');
+    expect(requests[0]).toContain('Them: Asha, can you send 40 boxes by Friday?');
+
+    reply[0] = '- They want 45 boxes';
+    expect((await session.catchUp())?.verdict).toBe('unverified');
+    await session.stop();
+  });
+});

@@ -1,19 +1,24 @@
 import type { ContextView } from '../../../shared/ipc.ts';
+import type { Settings } from '../../../shared/settings.ts';
 import { useDraft } from './SettingsPanel.tsx';
 import { Icon } from './Icon.tsx';
 
 interface Props {
   context: ContextView;
-  note: string;
-  onNote: (note: string) => void;
-  myName: string;
-  onMyName: (name: string) => void;
+  settings: Settings;
+  /** Past meetings with minutes or notes that answers can use. */
+  memoryMeetings: number;
+  onChange: (patch: Partial<Settings>) => void;
 }
 
-/** What Bolo knows: who you are, the folder of reference files, and the note about this call. */
-export function ContextTab({ context, note, onNote, myName, onMyName }: Props) {
-  const draft = useDraft(note, onNote);
-  const name = useDraft(myName, onMyName);
+/**
+ * What Bolo knows: who you are, the folder of reference files, past meetings, and the note
+ * about this call.
+ */
+export function ContextTab({ context, settings: s, memoryMeetings, onChange }: Props) {
+  const note = useDraft(s.contextNote, (contextNote) => onChange({ contextNote }));
+  const name = useDraft(s.myName, (myName) => onChange({ myName }));
+  const watch = useDraft(s.watchWords, (watchWords) => onChange({ watchWords }));
   return (
     <div className="context">
       <label className="inline">
@@ -21,10 +26,24 @@ export function ContextTab({ context, note, onNote, myName, onMyName }: Props) {
         <input
           type="text"
           maxLength={80}
-          placeholder="Used in the minutes and action items"
+          placeholder="Used in the minutes, and alerts when they say it"
           {...name}
         />
       </label>
+      <label className="inline">
+        Alert me on
+        <input
+          type="text"
+          maxLength={300}
+          placeholder="Project or client names, other spellings of my name (comma-separated)"
+          {...watch}
+        />
+      </label>
+      <p className="muted small">
+        Speech-to-text may write names in another script (Hindi writes Krunal as क्रुणाल): add that
+        spelling too.
+      </p>
+
       <div className="row">
         <span className="path" title={context.dir}>
           {context.dir || 'No context folder yet'}
@@ -63,9 +82,19 @@ export function ContextTab({ context, note, onNote, myName, onMyName }: Props) {
           ))}
         </ul>
       )}
-      {context.files.length > 0 && (
+
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={s.useMeetings}
+          onChange={(e) => onChange({ useMeetings: e.target.checked })}
+        />
+        Also answer from my past meetings&apos; minutes and notes
+        {s.useMeetings && <span className="muted small">({memoryMeetings} saved)</span>}
+      </label>
+      {(context.files.length > 0 || (s.useMeetings && memoryMeetings > 0)) && (
         <p className="muted small">
-          These files are sent to your AI model to answer questions. They are not sent anywhere
+          What matches a question is sent to your AI model to answer it. Nothing is sent anywhere
           else.
         </p>
       )}
@@ -75,7 +104,7 @@ export function ContextTab({ context, note, onNote, myName, onMyName }: Props) {
         <textarea
           rows={2}
           placeholder="e.g. I sell industrial paint to distributors. Be brief and polite."
-          {...draft}
+          {...note}
         />
       </label>
     </div>

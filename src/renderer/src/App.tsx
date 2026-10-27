@@ -53,6 +53,13 @@ export function App() {
     return () => observer.disconnect();
   }, [loaded]);
 
+  // A mention stays long enough to notice, then goes; a newer one restarts the clock.
+  useEffect(() => {
+    if (!state.mention) return;
+    const t = setTimeout(() => dispatch({ type: 'dismiss-mention' }), 20_000);
+    return () => clearTimeout(t);
+  }, [state.mention]);
+
   // Clear notices after a while.
   useEffect(() => {
     if (!state.notice) return;
@@ -227,6 +234,34 @@ export function App() {
       {state.clickThrough && (
         <div className="strip warn">Click-through on — Ctrl+Shift+M to use Bolo</div>
       )}
+      {state.mention && (
+        <div className={`strip mention ${state.mention.asked ? 'asked' : ''}`} role="alert">
+          <span className="mention-text">
+            <strong>
+              {state.mention.asked ? 'Asked you' : 'Mentioned'}: {state.mention.terms.join(', ')}
+            </strong>{' '}
+            “{state.mention.text}”
+          </span>
+          {state.mention.asked && state.running && (
+            <button
+              className="ghost small"
+              onClick={() => {
+                window.bolo.requestSuggestion();
+                dispatch({ type: 'dismiss-mention' });
+              }}
+            >
+              Answer
+            </button>
+          )}
+          <button
+            className="icon"
+            title="Dismiss"
+            onClick={() => dispatch({ type: 'dismiss-mention' })}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+      )}
       {state.notice && (
         <div
           className={`strip notice-${state.notice.level}`}
@@ -265,8 +300,17 @@ export function App() {
                 </button>
               ))}
               <span className="spacer" />
-              {app.context.files.length > 0 ? (
-                <span className="muted small">{app.context.files.length} files loaded</span>
+              {app.context.files.length > 0 || app.memoryMeetings > 0 ? (
+                <span className="muted small">
+                  {[
+                    app.context.files.length && `${app.context.files.length} files`,
+                    s.useMeetings &&
+                      app.memoryMeetings &&
+                      `${app.memoryMeetings} past meeting${app.memoryMeetings === 1 ? '' : 's'}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               ) : (
                 app.context.error && <span className="warn small">{app.context.error}</span>
               )}
@@ -308,6 +352,17 @@ export function App() {
                   running={state.running}
                   onRequest={() => window.bolo.requestSuggestion()}
                 />
+                {state.running && (
+                  <div className="row">
+                    <button
+                      className="ghost small"
+                      onClick={() => window.bolo.catchUp()}
+                      title="What was said in the last 10 minutes, and anything asked of you"
+                    >
+                      Catch me up <kbd>Ctrl+Shift+U</kbd>
+                    </button>
+                  </div>
+                )}
                 {state.echoesRemoved > 0 && (
                   <p className="muted small">
                     {state.echoesRemoved} echoed line(s) removed from Me
@@ -328,10 +383,9 @@ export function App() {
             {state.panel === 'context' && (
               <ContextTab
                 context={app.context}
-                note={s.contextNote}
-                onNote={(contextNote) => void updateSettings({ contextNote })}
-                myName={s.myName}
-                onMyName={(myName) => void updateSettings({ myName })}
+                settings={s}
+                memoryMeetings={app.memoryMeetings}
+                onChange={(p) => void updateSettings(p)}
               />
             )}
 

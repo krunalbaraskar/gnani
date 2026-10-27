@@ -57,6 +57,7 @@ const HOTKEYS = {
   clickThrough: 'CommandOrControl+Shift+M',
   // Not Ctrl+Shift+S: that is "Save As" in most apps, and this one sends a screenshot.
   askScreen: 'CommandOrControl+Alt+Space',
+  catchUp: 'CommandOrControl+Shift+U',
 } as const;
 
 /**
@@ -103,6 +104,9 @@ void app.whenReady().then(() => {
   const env = loadEnv();
   const settings = new SettingsStore();
   const emit = (e: BoloEvent) => {
+    // A question naming the user brings a hidden overlay back, without taking focus.
+    if (e.type === 'mention' && e.mention.asked && overlay && !overlay.isVisible())
+      overlay.showInactive();
     for (const w of [overlay, library]) if (w && !w.isDestroyed()) w.webContents.send(IPC.event, e);
   };
   const meetings = new MeetingService({
@@ -133,14 +137,24 @@ void app.whenReady().then(() => {
     });
   };
   void loadContextDir();
+  void meetings.refreshMemory();
 
-  const controller = new SessionController(
-    loadEnv,
-    () => settings.get(),
-    () => (context.context.files.length ? context.context : null),
-    emit,
-    log,
-  );
+  /** What answers are grounded in: the folder's files, then past meetings' minutes. */
+  const answerContext = (): LoadedContext | null => {
+    const memory = settings.get().useMeetings ? meetings.memory : [];
+    const files = context.context;
+    if (!files.files.length && !memory.length) return null;
+    return {
+      files: [
+        ...files.files,
+        ...[...new Set(memory.map((c) => c.file))].map((name) => ({ name, info: 'meeting' })),
+      ],
+      skipped: files.skipped,
+      chunks: [...files.chunks, ...memory],
+    };
+  };
+
+  const controller = new SessionController(loadEnv, () => settings.get(), answerContext, emit, log);
 
   const isOwn = (id: number) =>
     !!overlay && !overlay.isDestroyed() && overlay.webContents.id === id;
@@ -188,6 +202,7 @@ void app.whenReady().then(() => {
       sessionPaused: controller.paused,
       demoAudioDir: demoDir,
       context: contextView(s.contextDir, context),
+      memoryMeetings: new Set(meetings.memory.map((c) => c.file)).size,
       // The window's protection was fixed at startup; a later .env edit must not change the claim.
       shareProtection: shareProtection(env.recordable),
     };
@@ -288,6 +303,23 @@ void app.whenReady().then(() => {
   });
   ipcMain.on(IPC.requestMeaning, (e, id: unknown) => {
     if (trusted(e) && typeof id === 'string') controller.requestMeaning(id);
+  });
+  ipcMain.on(IPC.catchUp, (e) => {
+    if (trusted(e)) controller.catchUp();
+  });
+  handle(IPC.askMeetings, async (question: unknown, askId: unknown) => {
+    const q = typeof question === 'string' ? question.trim().slice(0, 500) : '';
+    if (!q || typeof askId !== 'number') return { error: 'Type a question.' };
+    const llm = llmConfig(settings.get(), loadEnv());
+    if (!llm.baseUrl || !llm.model) return { error: 'Set an AI model in Settings first.' };
+    try {
+      return await meetings.ask(q, {
+        budget: settings.get().contextBudgetChars,
+        onText: (text) => emit({ type: 'ask-progress', askId, text }),
+      });
+    } catch (err) {
+      return { error: (err as Error).message };
+    }
   });
   ipcMain.on(IPC.setPaused, (e, paused: unknown) => {
     if (fromOverlay(e) && typeof paused === 'boolean') controller.setPaused(paused);
@@ -490,6 +522,7 @@ void app.whenReady().then(() => {
   });
   register(HOTKEYS.clickThrough, toggleClickThrough);
   register(HOTKEYS.askScreen, () => void controller.askScreen(capture));
+  register(HOTKEYS.catchUp, () => controller.catchUp());
 
   // Quitting mid-call still saves the transcript (if an export folder is set).
   let quitting = false;
