@@ -41,7 +41,7 @@ function dayLabel(ms: number): string {
 }
 
 function initialId(): string | null {
-  return /^#library\/(m\d+)$/.exec(window.location.hash)?.[1] ?? null;
+  return /^#(?:library|app\/meetings)\/(m\d+)$/.exec(window.location.hash)?.[1] ?? null;
 }
 
 /** Markdown from the model or the user, rendered by the escaping renderer. */

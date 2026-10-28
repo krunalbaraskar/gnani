@@ -161,6 +161,7 @@ describe('meetingNow', () => {
     allDay: false,
     attendees: [],
     hasAgenda: false,
+    source: 'ics',
   };
 
   it('offers a meeting from ten minutes before it starts until it ends', () => {
@@ -179,7 +180,7 @@ describe('meetingNow', () => {
 
 describe('meetingNow with dismissed meetings', () => {
   it('offers the next meeting when the first was waved away', () => {
-    const base = { title: '', allDay: false, attendees: [], hasAgenda: false };
+    const base = { title: '', allDay: false, attendees: [], hasAgenda: false, source: 'ics' };
     const a = { ...base, key: 'a', start: 0, end: 30 * 60_000 };
     const b = { ...base, key: 'b', start: 5 * 60_000, end: 60 * 60_000 };
     expect(meetingNow([a, b], 60_000)?.event.key).toBe('a');

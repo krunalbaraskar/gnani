@@ -21,6 +21,8 @@ const app: AppState = {
   sessionPaused: false,
   memoryMeetings: 0,
   calendar: { configured: false, events: [] },
+  integrations: { accounts: [], available: { google: false, microsoft: false } },
+  detected: null,
   demoAudioDir: '/tmp/demo',
   context: { dir: '', files: [], skipped: [] },
   shareProtection: 'unverified',

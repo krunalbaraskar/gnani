@@ -72,6 +72,7 @@ export class CalendarService {
             attendees: e.attendees,
             joinUrl: e.joinUrl,
             hasAgenda: !!e.description,
+            source: 'ics',
           })),
         };
       } catch (err) {

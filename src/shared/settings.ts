@@ -31,6 +31,10 @@ export interface Settings {
   calendarUrl: string;
   /** An .ics file instead of a link. Set only via the file dialog. */
   calendarFile: string;
+  /** Notice calls in other apps (Zoom, Teams, Meet…) and offer to start Bolo. */
+  autoDetect: boolean;
+  /** The main window's first-run setup was finished or skipped. */
+  onboarded: boolean;
   /** Gnani language code (see GNANI_LANGUAGES). */
   sttLanguage: string;
   /** Numbers, currency and dates as digits (Gnani ITN; Hindi and English only). */
@@ -88,6 +92,8 @@ export const DEFAULT_SETTINGS: Settings = {
   watchWords: '',
   calendarUrl: '',
   calendarFile: '',
+  autoDetect: true,
+  onboarded: false,
   sttLanguage: 'hi-IN',
   formatNumbers: false,
   outputLanguage: 'same',
@@ -167,6 +173,8 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
           (/^(https|webcal):\/\/[^\s]+$/i.test(v as string) && (v as string).length <= 2000)),
     ),
     calendarFile: pick(i['calendarFile'], d.calendarFile, isString),
+    autoDetect: pick(i['autoDetect'], d.autoDetect, isBool),
+    onboarded: pick(i['onboarded'], d.onboarded, isBool),
     watchWords: pick(
       i['watchWords'],
       d.watchWords,

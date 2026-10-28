@@ -24,6 +24,8 @@ import { tokenize, type Chunk } from '../context/context.ts';
 import { askMeetings, type MeetingAnswer } from './ask.ts';
 import { meetingChunks } from './memory.ts';
 import { guessSpeakers } from './speakers.ts';
+import { listActionItems, setActionItemDone } from './actions.ts';
+import type { ActionItemView } from '../../shared/integrations.ts';
 import { cleanSpeakerName } from '../../shared/speakers.ts';
 
 export type MeetingEvent =
@@ -243,6 +245,21 @@ export class MeetingService {
     await this.deps.store.save(next);
     this.changed(next);
     return fresh.length;
+  }
+
+  async actionItems(): Promise<ActionItemView[]> {
+    return listActionItems(await this.deps.store.all());
+  }
+
+  /** Ticks or unticks one action item in a meeting's minutes. */
+  async setActionItem(id: string, index: number, done: boolean): Promise<boolean> {
+    const m = await this.deps.store.get(id);
+    const markdown = m?.minutes && setActionItemDone(m.minutes.markdown, index, done);
+    if (!m?.minutes || !markdown) return false;
+    const next: StoredMeeting = { ...m, minutes: { ...m.minutes, markdown } };
+    await this.deps.store.save(next);
+    this.changed(next);
+    return true;
   }
 
   /** "Ask your meetings" from the library. */

@@ -6,7 +6,7 @@ import './styles.css';
 import './library/library.css';
 
 // One bundle, two windows: the overlay, and the meeting library at #library.
-const isLibrary = window.location.hash.startsWith('#library');
+const isLibrary = /^#(library|app)\b/.test(window.location.hash);
 if (isLibrary) {
   document.documentElement.classList.add('library-window');
   document.title = 'Bolo — Meetings';

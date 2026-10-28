@@ -21,6 +21,8 @@ import {
   IPC,
   type AppState,
   type BoloEvent,
+  type AppSection,
+  type ConnectResult,
   type ContextView,
   type ExportResult,
   type ShareProtection,
@@ -45,7 +47,7 @@ import {
   setClickThrough,
 } from './overlay-window.ts';
 import { CalendarService } from './calendar.ts';
-import { createLibraryWindow } from './library-window.ts';
+import { APP_SECTIONS, createMainWindow } from './main-window.ts';
 import { fileStem, writeMinutesPdf } from './minutes-export.ts';
 import { installMediaHandlers } from './permissions.ts';
 import { captureScreen } from './screen-capture.ts';
@@ -174,11 +176,11 @@ void app.whenReady().then(() => {
   });
   overlay.on('closed', () => (overlay = null));
 
-  const isLibrary = (id: number) =>
+  const isMain = (id: number) =>
     !!library && !library.isDestroyed() && library.webContents.id === id;
   /** Rejects IPC from anything other than the top frame of our two windows. */
   const trusted = (e: IpcMainEvent | IpcMainInvokeEvent) =>
-    (isOwn(e.sender.id) || isLibrary(e.sender.id)) && e.senderFrame === e.sender.mainFrame;
+    (isOwn(e.sender.id) || isMain(e.sender.id)) && e.senderFrame === e.sender.mainFrame;
   /** Audio, window commands and the call itself belong to the overlay alone. */
   const fromOverlay = (e: IpcMainEvent | IpcMainInvokeEvent) =>
     isOwn(e.sender.id) && e.senderFrame === e.sender.mainFrame;
@@ -211,6 +213,8 @@ void app.whenReady().then(() => {
       context: contextView(s.contextDir, context),
       memoryMeetings: new Set(meetings.memory.map((c) => c.file)).size,
       calendar: calendar.view,
+      integrations: { accounts: [], available: { google: false, microsoft: false } },
+      detected: null,
       // The window's protection was fixed at startup; a later .env edit must not change the claim.
       shareProtection: shareProtection(env.recordable),
     };
@@ -269,6 +273,12 @@ void app.whenReady().then(() => {
     return calendar.refresh();
   });
   handle(IPC.refreshCalendar, () => calendar.refresh());
+  // Filled in by the accounts service (OAuth); until then sign-in reports it is unavailable.
+  handle(IPC.connectAccount, (): ConnectResult => ({
+    ok: false,
+    error: 'Calendar sign-in is not available yet.',
+  }));
+  handle(IPC.disconnectAccount, () => undefined);
   ipcMain.on(IPC.openJoinLink, (e, key: unknown) => {
     const url = trusted(e) && typeof key === 'string' ? calendar.find(key)?.joinUrl : undefined;
     // Only the https meeting links the parser recognised, never anything else from the file.
@@ -372,21 +382,46 @@ void app.whenReady().then(() => {
 
   // ---- Meeting library ----
 
-  const openLibrary = (id?: string) => {
+  /** Shows the main window at a section, creating it if needed. */
+  const openApp = (section: AppSection = 'home', id?: string) => {
     if (library && !library.isDestroyed()) {
+      library.webContents.send(IPC.event, {
+        type: 'navigate',
+        section,
+        meetingId: id,
+      } as BoloEvent);
+      // Older renderers listen for this one.
       if (id) library.webContents.send(IPC.event, { type: 'open-meeting', id } as BoloEvent);
       if (library.isMinimized()) library.restore();
       library.show();
       library.focus();
       return;
     }
-    library = createLibraryWindow(id);
+    library = createMainWindow(section, id);
     library.on('closed', () => (library = null));
   };
   const validId = (id: unknown): id is string => typeof id === 'string' && MEETING_ID.test(id);
   ipcMain.on(IPC.openLibrary, (e, id: unknown) => {
-    if (trusted(e)) openLibrary(validId(id) ? id : undefined);
+    if (trusted(e)) openApp('meetings', validId(id) ? id : undefined);
   });
+  ipcMain.on(IPC.requestStart, (e, eventKey: unknown) => {
+    if (!trusted(e) || !overlay || overlay.isDestroyed()) return;
+    overlay.showInactive();
+    overlay.webContents.send(IPC.event, {
+      type: 'start-request',
+      eventKey: typeof eventKey === 'string' ? eventKey : undefined,
+    } as BoloEvent);
+  });
+  ipcMain.on(IPC.openApp, (e, section: unknown) => {
+    if (trusted(e))
+      openApp(APP_SECTIONS.includes(section as AppSection) ? (section as AppSection) : 'home');
+  });
+  handle(IPC.listActionItems, () => meetings.actionItems());
+  handle(IPC.toggleActionItem, (id: unknown, index: unknown, done: unknown) =>
+    validId(id) && Number.isInteger(index) && typeof done === 'boolean'
+      ? meetings.setActionItem(id, index as number, done)
+      : false,
+  );
   handle(IPC.listMeetings, (query: unknown) =>
     meetings.list(typeof query === 'string' ? query.slice(0, 200) : ''),
   );

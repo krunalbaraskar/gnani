@@ -174,6 +174,16 @@ export function App() {
     },
     [state.app?.settings, files, stop, teardownAudio],
   );
+  // "Start" pressed in the main window or on a notice: audio is captured here.
+  const startRef = useRef(start);
+  startRef.current = start;
+  useEffect(
+    () =>
+      window.bolo.onEvent((event) => {
+        if (event.type === 'start-request' && !state.running) void startRef.current(event.eventKey);
+      }),
+    [state.running],
+  );
 
   const loadDemo = useCallback(async () => {
     const demo = await window.bolo.readDemoAudio();

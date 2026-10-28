@@ -11,6 +11,8 @@ export interface CalendarEventView {
   joinUrl?: string;
   /** The invite has a description, which becomes the meeting's agenda. */
   hasAgenda: boolean;
+  /** Where it came from: a signed-in account ("google:asha@gmail.com"), or "ics". */
+  source: string;
 }
 
 export interface CalendarView {

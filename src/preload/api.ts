@@ -5,6 +5,9 @@ import type {
   DemoAudio,
   ExportFormat,
   ExportResult,
+  ActionItemView,
+  AppSection,
+  ConnectResult,
   StartResult,
   StopResult,
   WindowCommand,
@@ -48,8 +51,25 @@ export interface BoloApi {
   askMeetings(question: string, askId: number): Promise<MeetingAnswerView | { error: string }>;
   /** Off the record: stop sending audio to speech-to-text until resumed. */
   setPaused(paused: boolean): void;
-  /** Opens (or focuses) the meeting library, optionally at one meeting. */
+  /** Opens (or focuses) the main window at Meetings, optionally at one meeting. */
   openLibrary(meetingId?: string): void;
+  /**
+   * Starts a call from any window: the overlay captures the audio, so this asks it to
+   * start (for a calendar event, if given) and brings it into view.
+   */
+  requestStart(eventKey?: string): void;
+  /** Opens (or focuses) the main window at a section. */
+  openApp(section?: AppSection): void;
+  /**
+   * Signs in to a calendar account in the system browser (OAuth with PKCE). Resolves when
+   * the user finishes or gives up; tokens stay in the main process, encrypted.
+   */
+  connectAccount(provider: 'google' | 'microsoft'): Promise<ConnectResult>;
+  disconnectAccount(accountId: string): Promise<void>;
+  /** Action items from all meetings' minutes, open ones first, newest meeting first. */
+  listActionItems(): Promise<ActionItemView[]>;
+  /** Ticks or unticks one action item in that meeting's minutes. */
+  toggleActionItem(meetingId: string, index: number, done: boolean): Promise<boolean>;
   listMeetings(query: string): Promise<MeetingSummary[]>;
   getMeeting(id: string): Promise<MeetingDetail | null>;
   updateMeeting(id: string, patch: MeetingPatch): Promise<MeetingDetail | null>;

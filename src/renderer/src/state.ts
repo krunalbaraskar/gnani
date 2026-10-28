@@ -247,6 +247,13 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
     case 'open-meeting':
     case 'ask-progress':
       return state; // for the library window
+    case 'integrations':
+      return state.app ? { ...state, app: { ...state.app, integrations: e.integrations } } : state;
+    case 'detected':
+      return state.app ? { ...state, app: { ...state.app, detected: e.meeting } } : state;
+    case 'navigate':
+    case 'start-request': // handled in App, which owns audio capture
+      return state;
     case 'calendar':
       return state.app ? { ...state, app: { ...state.app, calendar: e.calendar } } : state;
     case 'memory-updated':

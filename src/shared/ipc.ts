@@ -1,5 +1,11 @@
 /** Types and channel names shared by main, preload and renderer. No runtime deps. */
 import type { CalendarView } from './calendar.ts';
+import type {
+  ActionItemView,
+  ConnectResult,
+  DetectedMeeting,
+  IntegrationsView,
+} from './integrations.ts';
 import type { MeetingSummary, MinutesProgressView } from './meeting.ts';
 import type { Settings } from './settings.ts';
 import type { Speaker, TranscriptSegment } from './transcript/types.ts';
@@ -26,6 +32,12 @@ export const IPC = {
   openJoinLink: 'bolo:open-join-link',
   setPaused: 'bolo:set-paused',
   openLibrary: 'bolo:open-library',
+  openApp: 'bolo:open-app',
+  requestStart: 'bolo:request-start',
+  connectAccount: 'bolo:connect-account',
+  disconnectAccount: 'bolo:disconnect-account',
+  listActionItems: 'bolo:list-action-items',
+  toggleActionItem: 'bolo:toggle-action-item',
   listMeetings: 'bolo:list-meetings',
   getMeeting: 'bolo:get-meeting',
   updateMeeting: 'bolo:update-meeting',
@@ -86,7 +98,13 @@ export interface AppState {
   memoryMeetings: number;
   calendar: CalendarView;
   shareProtection: ShareProtection;
+  integrations: IntegrationsView;
+  /** A call another app is in right now (see settings.autoDetect), or null. */
+  detected: DetectedMeeting | null;
 }
+
+/** Sections of the main window. */
+export type AppSection = 'home' | 'meetings' | 'ask' | 'settings';
 
 export interface SuggestionView {
   id: string;
@@ -138,7 +156,15 @@ export type BoloEvent =
   | { type: 'open-meeting'; id: string }
   | { type: 'ask-progress'; askId: number; text: string }
   | { type: 'memory-updated'; meetings: number }
-  | { type: 'calendar'; calendar: CalendarView };
+  | { type: 'calendar'; calendar: CalendarView }
+  | { type: 'integrations'; integrations: IntegrationsView }
+  | { type: 'detected'; meeting: DetectedMeeting | null }
+  /** The main window should show this section (and meeting, for "meetings"). */
+  | { type: 'navigate'; section: AppSection; meetingId?: string }
+  /** Overlay only: start a call (audio is captured there), for a calendar event if given. */
+  | { type: 'start-request'; eventKey?: string };
+
+export type { ActionItemView, ConnectResult };
 
 export type StartResult = { ok: true } | { ok: false; error: string };
 
