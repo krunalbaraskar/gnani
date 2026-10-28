@@ -15,6 +15,7 @@ import type {
   MeetingPatch,
   MeetingSummary,
 } from '../shared/meeting.ts';
+import type { CalendarView } from '../shared/calendar.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Speaker } from '../shared/transcript/types.ts';
 
@@ -22,7 +23,13 @@ import type { Speaker } from '../shared/transcript/types.ts';
 export interface BoloApi {
   getState(): Promise<AppState>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
-  startSession(): Promise<StartResult>;
+  /** `eventKey`: start the call for this calendar meeting (its title, people and agenda). */
+  startSession(eventKey?: string): Promise<StartResult>;
+  /** Opens the native file dialog for an .ics file; the renderer never supplies a path. */
+  chooseCalendarFile(clear?: boolean): Promise<CalendarView>;
+  refreshCalendar(): Promise<CalendarView>;
+  /** Opens the meeting's Meet/Zoom/Teams link in the browser. */
+  openJoinLink(eventKey: string): void;
   stopSession(): Promise<StopResult>;
   requestSuggestion(): void;
   chooseExportDir(): Promise<string | null>;
@@ -50,6 +57,8 @@ export interface BoloApi {
   deleteMeeting(id: string): Promise<boolean>;
   writeMinutes(id: string): void;
   cancelMinutes(id: string): void;
+  /** Names "them" lines from cues in the conversation; guesses stay marked until confirmed. */
+  guessSpeakers(id: string): Promise<{ named: number } | { error: string }>;
   /** Save dialog in the main process; the renderer never supplies a path. */
   exportMeeting(id: string, format: ExportFormat): Promise<ExportResult>;
   /** Copies the minutes as plain text, ready for an email or chat. */

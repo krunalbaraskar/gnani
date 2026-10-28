@@ -44,6 +44,7 @@ import {
   OVERLAY_WIDTH,
   setClickThrough,
 } from './overlay-window.ts';
+import { CalendarService } from './calendar.ts';
 import { createLibraryWindow } from './library-window.ts';
 import { fileStem, writeMinutesPdf } from './minutes-export.ts';
 import { installMediaHandlers } from './permissions.ts';
@@ -138,6 +139,12 @@ void app.whenReady().then(() => {
   };
   void loadContextDir();
   void meetings.refreshMemory();
+  const calendar = new CalendarService(
+    () => settings.get(),
+    (view) => emit({ type: 'calendar', calendar: view }),
+    log,
+  );
+  calendar.start();
 
   /** What answers are grounded in: the folder's files, then past meetings' minutes. */
   const answerContext = (): LoadedContext | null => {
@@ -203,6 +210,7 @@ void app.whenReady().then(() => {
       demoAudioDir: demoDir,
       context: contextView(s.contextDir, context),
       memoryMeetings: new Set(meetings.memory.map((c) => c.file)).size,
+      calendar: calendar.view,
       // The window's protection was fixed at startup; a later .env edit must not change the claim.
       shareProtection: shareProtection(env.recordable),
     };
@@ -213,21 +221,58 @@ void app.whenReady().then(() => {
     const {
       exportDir: _ignored,
       contextDir: _alsoIgnored,
+      calendarFile: _fileIgnored,
       ...safe
     } = (patch && typeof patch === 'object' ? patch : {}) as Record<string, unknown>;
+    const before = settings.get().calendarUrl;
+    // A link replaces a calendar file; only one source at a time.
+    if (typeof safe['calendarUrl'] === 'string' && safe['calendarUrl']) safe['calendarFile'] = '';
     const next = settings.update(safe);
     if (env.opaqueWindow) overlay?.setOpacity(next.overlayOpacity);
+    if (next.calendarUrl !== before) void calendar.refresh();
     return next;
   });
 
   // Files are re-read at call start, so edits made since the last call are picked up.
-  handle(IPC.startSession, async (): Promise<StartResult> => {
+  handle(IPC.startSession, async (eventKey: unknown): Promise<StartResult> => {
     const s = settings.get();
     if (!s.consentAcknowledged || s.consentVersion < CONSENT_VERSION) {
       return { ok: false, error: 'Read and accept the notice first.' };
     }
     await loadContextDir();
-    return controller.start();
+    const event = typeof eventKey === 'string' ? calendar.find(eventKey) : undefined;
+    return controller.start(
+      event && {
+        title: event.title,
+        attendees: event.attendees.slice(0, 50),
+        agenda: event.description.slice(0, 1500),
+      },
+    );
+  });
+
+  handle(IPC.chooseCalendarFile, async (clear: unknown) => {
+    if (clear === true) {
+      settings.update({ calendarFile: '' });
+      return calendar.refresh();
+    }
+    const opts = {
+      title: 'Calendar file (.ics)',
+      properties: ['openFile' as const],
+      filters: [{ name: 'Calendar', extensions: ['ics'] }],
+    };
+    const parent = library && !library.isDestroyed() ? library : overlay;
+    const r = parent
+      ? await dialog.showOpenDialog(parent, opts)
+      : await dialog.showOpenDialog(opts);
+    const file = r.canceled ? null : r.filePaths[0];
+    if (file) settings.update({ calendarFile: file, calendarUrl: '' });
+    return calendar.refresh();
+  });
+  handle(IPC.refreshCalendar, () => calendar.refresh());
+  ipcMain.on(IPC.openJoinLink, (e, key: unknown) => {
+    const url = trusted(e) && typeof key === 'string' ? calendar.find(key)?.joinUrl : undefined;
+    // Only the https meeting links the parser recognised, never anything else from the file.
+    if (url?.startsWith('https://')) void shell.openExternal(url);
   });
 
   /**
@@ -350,8 +395,11 @@ void app.whenReady().then(() => {
     if (!validId(id) || !patch || typeof patch !== 'object') return null;
     const p = patch as Record<string, unknown>;
     const safe: MeetingPatch = {};
-    for (const k of ['title', 'notes', 'minutes'] as const)
+    for (const k of ['title', 'notes', 'minutes', 'themName'] as const)
       if (typeof p[k] === 'string') safe[k] = p[k];
+    const line = p['lineSpeaker'] as Record<string, unknown> | undefined;
+    if (line && typeof line.id === 'string' && typeof line.name === 'string')
+      safe.lineSpeaker = { id: line.id, name: line.name };
     return meetings.update(id, safe);
   });
   const parentFor = () => (library && !library.isDestroyed() ? library : overlay);
@@ -387,6 +435,16 @@ void app.whenReady().then(() => {
   });
   ipcMain.on(IPC.cancelMinutes, (e, id: unknown) => {
     if (trusted(e) && validId(id)) meetings.cancelMinutes(id);
+  });
+  handle(IPC.guessSpeakers, async (id: unknown) => {
+    if (!validId(id)) return { error: 'No such meeting.' };
+    const llm = llmConfig(settings.get(), loadEnv());
+    if (!llm.baseUrl || !llm.model) return { error: 'Set an AI model in Settings first.' };
+    try {
+      return { named: await meetings.guessSpeakers(id) };
+    } catch (err) {
+      return { error: (err as Error).message };
+    }
   });
   handle(IPC.exportMeeting, async (id: unknown, format: unknown): Promise<ExportResult> => {
     const m = validId(id) ? await meetings.detail(id) : null;

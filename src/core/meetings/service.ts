@@ -23,6 +23,8 @@ import {
 import { tokenize, type Chunk } from '../context/context.ts';
 import { askMeetings, type MeetingAnswer } from './ask.ts';
 import { meetingChunks } from './memory.ts';
+import { guessSpeakers } from './speakers.ts';
+import { cleanSpeakerName } from '../../shared/speakers.ts';
 
 export type MeetingEvent =
   | { type: 'meeting-updated'; summary: MeetingSummary }
@@ -65,7 +67,7 @@ export class MeetingService {
 
   /** A finished session becomes a meeting in the library. */
   async saveRecord(record: SessionRecord): Promise<StoredMeeting> {
-    const m = newMeeting(record);
+    const m = newMeeting(record, this.deps.writer().myName);
     await this.deps.store.save(m);
     this.changed(m);
     return m;
@@ -92,6 +94,23 @@ export class MeetingService {
       next.titleEdited = true;
     }
     if (typeof patch.notes === 'string') next.notes = patch.notes.slice(0, LIMITS.notes);
+    if (typeof patch.themName === 'string') {
+      next.speakers = { ...m.speakers, them: cleanSpeakerName(patch.themName) || undefined };
+    }
+    const line = patch.lineSpeaker;
+    const seg = line && m.record.segments.find((s) => s.id === line.id && s.speaker === 'them');
+    if (line && seg) {
+      const byLine = { ...m.speakers?.byLine };
+      const name = cleanSpeakerName(line.name);
+      if (name) byLine[seg.id] = name;
+      else delete byLine[seg.id];
+      next.speakers = {
+        ...next.speakers,
+        byLine,
+        // The user has now decided this line, so it is no longer a guess.
+        guessed: (m.speakers?.guessed ?? []).filter((id) => id !== seg.id),
+      };
+    }
     if (typeof patch.minutes === 'string' && m.minutes) {
       // The user has checked the text, so earlier figure warnings no longer apply.
       next.minutes = {
@@ -141,6 +160,8 @@ export class MeetingService {
           agenda: m.record.contextNote,
           notes: m.notes,
           title: m.titleEdited ? m.title : undefined,
+          names: m.speakers,
+          attendees: m.record.attendees,
         },
         {
           ...this.deps.minutesOptions,
@@ -192,6 +213,36 @@ export class MeetingService {
     if (run !== this.memoryRun) return;
     this.memoryChunks = chunks;
     this.deps.emit({ type: 'memory-updated', meetings: new Set(chunks.map((c) => c.file)).size });
+  }
+
+  /**
+   * Names "them" lines from cues in the conversation. Lines the user named stay as they
+   * are; earlier guesses are replaced. Returns how many lines got a name.
+   */
+  async guessSpeakers(id: string, signal?: AbortSignal): Promise<number> {
+    const m = await this.deps.store.get(id);
+    if (!m) return 0;
+    const guesses = await guessSpeakers(this.deps.llm(), m.record.segments, {
+      myName: this.deps.writer().myName,
+      attendees: m.record.attendees,
+      names: m.speakers,
+      signal,
+    });
+    const latest = (await this.deps.store.get(id)) ?? m;
+    const guessed = new Set(latest.speakers?.guessed ?? []);
+    const byLine: Record<string, string> = {};
+    // Keep what the user set; drop old guesses; add the new ones.
+    for (const [lineId, name] of Object.entries(latest.speakers?.byLine ?? {}))
+      if (!guessed.has(lineId)) byLine[lineId] = name;
+    const fresh = Object.keys(guesses).filter((lineId) => !(lineId in byLine));
+    for (const lineId of fresh) byLine[lineId] = guesses[lineId]!;
+    const next: StoredMeeting = {
+      ...latest,
+      speakers: { ...latest.speakers, byLine, guessed: fresh },
+    };
+    await this.deps.store.save(next);
+    this.changed(next);
+    return fresh.length;
   }
 
   /** "Ask your meetings" from the library. */

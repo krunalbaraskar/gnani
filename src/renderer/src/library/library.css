@@ -485,3 +485,57 @@ button.primary:hover:not(:disabled) {
   box-shadow: inset 3px 0 0 var(--warn);
   padding-left: 8px;
 }
+
+/* Speaker names */
+.speakers-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 0 0 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.speakers-bar input {
+  width: 220px;
+}
+.speakers-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tline {
+  grid-template-columns: 52px 110px 1fr;
+}
+.who-pick,
+.who-input {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--them);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 1px 2px;
+  max-width: 110px;
+  text-overflow: ellipsis;
+}
+.who-pick:hover,
+.who-pick:focus,
+.who-input {
+  border-color: var(--line);
+  background: rgba(0, 0, 0, 0.28);
+}
+.who-pick.guessed {
+  font-style: italic;
+  font-weight: 500;
+  text-decoration: underline dotted;
+}
+.who-pick option {
+  color: var(--text);
+  background: #1d2027;
+  font-style: normal;
+}
+.tline.bolo .text {
+  white-space: pre-wrap;
+}

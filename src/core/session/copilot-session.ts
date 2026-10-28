@@ -31,6 +31,14 @@ export interface SessionEvents {
   onMention?(m: Mention): void;
 }
 
+/** A meeting from the user's calendar. */
+export interface MeetingInfo {
+  title: string;
+  attendees: string[];
+  /** The invite's description; kept short (see the main process). */
+  agenda: string;
+}
+
 export interface Mention {
   segmentId: string;
   text: string;
@@ -54,6 +62,8 @@ export interface CopilotSessionDeps {
   now?: () => number;
   logger?: Logger;
   autoSuggestCooldownMs?: number;
+  /** The calendar meeting this session is for, when started from the calendar. */
+  meeting?: MeetingInfo;
 }
 
 /**
@@ -83,7 +93,8 @@ export class CopilotSession {
       startedAt: this.now(),
       sttLanguage: s.sttLanguage,
       outputLanguage: s.outputLanguage,
-      contextNote: s.contextNote,
+      contextNote: this.note(s),
+      ...(deps.meeting ? { title: deps.meeting.title, attendees: deps.meeting.attendees } : {}),
       audioMode: s.audioMode,
       segments: [],
       suggestions: [],
@@ -188,7 +199,7 @@ export class CopilotSession {
     const s = this.deps.settings();
     return this.engine.request({
       segments: this.transcript.getRecent(CATCHUP_MINUTES, this.now()),
-      contextNote: s.contextNote,
+      contextNote: this.note(s),
       outputLanguage: s.outputLanguage,
       trigger: 'catchup',
       myName: s.myName,
@@ -306,6 +317,20 @@ export class CopilotSession {
     }
   }
 
+  /** The user's note, plus the calendar invite's title, people and agenda. */
+  private note(s: Settings): string {
+    const m = this.deps.meeting;
+    if (!m) return s.contextNote;
+    return [
+      s.contextNote.trim(),
+      `Meeting: ${m.title}`,
+      m.attendees.length ? `Invited: ${m.attendees.join(', ')}` : '',
+      m.agenda.trim() ? `Agenda (from the invite):\n${m.agenda.trim()}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
   private myLanguage(): string {
     return this.deps.myLanguageLabel?.() ?? 'English';
   }
@@ -321,7 +346,7 @@ export class CopilotSession {
       .map((t) => t.text);
     return {
       segments: this.transcript.getRecent(s.transcriptMinutes, this.now()),
-      contextNote: s.contextNote,
+      contextNote: this.note(s),
       outputLanguage: s.outputLanguage,
       trigger,
       question: trigger === 'auto' ? question : undefined,

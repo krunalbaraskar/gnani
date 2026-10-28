@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { meetingNow, startsInLabel } from '../../shared/calendar.ts';
 import { CONSENT_VERSION, type Settings } from '../../shared/settings.ts';
 import { SPEAKERS, type Speaker } from '../../shared/transcript/types.ts';
 import { openAudioPort, postFrame } from './audio/audio-ports.ts';
@@ -53,6 +54,15 @@ export function App() {
     return () => observer.disconnect();
   }, [loaded]);
 
+  // The calendar meeting to offer, checked every 30 s; one the user dismissed stays away.
+  const [clock, setClock] = useState(() => Date.now());
+  const [dismissedEvents, setDismissedEvents] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const offer = state.app ? meetingNow(state.app.calendar.events, clock, dismissedEvents) : null;
+
   // A mention stays long enough to notice, then goes; a newer one restarts the clock.
   useEffect(() => {
     if (!state.mention) return;
@@ -99,67 +109,71 @@ export function App() {
     else if (res.error) dispatch({ type: 'notice', level: 'error', message: res.error });
   }, [teardownAudio]);
 
-  const start = useCallback(async () => {
-    const settings = state.app?.settings;
-    if (!settings) return;
-    if (settings.audioMode === 'file' && !files.me && !files.them) {
-      dispatch({ type: 'panel', panel: 'settings' });
-      dispatch({
-        type: 'notice',
-        level: 'error',
-        message: 'Choose WAV files to replay (or click Demo) under Settings → Audio.',
-      });
-      return;
-    }
-    dispatch({ type: 'starting' });
-    const res = await window.bolo.startSession();
-    if (!res.ok) {
-      dispatch({ type: 'start-failed', error: res.error });
-      return;
-    }
-    setStartedAt(Date.now());
-    try {
-      for (const s of SPEAKERS) ports.current[s] = await openAudioPort(s);
-      const sink: AudioSink = {
-        frame: (speaker, f) => {
-          const p = ports.current[speaker];
-          if (p) postFrame(p, f);
-        },
-        level: (speaker, level) => {
-          // Throttle meter updates to ~12/s per speaker.
-          const now = performance.now();
-          if (now - levelTimer.current[speaker] < 80 && level > 0) return;
-          levelTimer.current[speaker] = now;
-          dispatch({ type: 'level', speaker, level });
-        },
-      };
-      source.current =
-        settings.audioMode === 'file'
-          ? new FileReplay(files, sink, {
-              speed: settings.replaySpeed,
-              audible: settings.replayAudible,
-              onEnd: () => {
-                dispatch({
-                  type: 'notice',
-                  level: 'info',
-                  message: 'Replay finished — wrapping up…',
-                });
-                // Give the last utterance and its answer time to come back before stopping.
-                setTimeout(() => void stop(), 2500);
-              },
-            })
-          : new LiveCapture(sink, {
-              micDeviceId: settings.micDeviceId,
-              onWarning: (message) => dispatch({ type: 'notice', level: 'error', message }),
-            });
-      await source.current.start();
-      dispatch({ type: 'capturing', capturing: true });
-    } catch (err) {
-      teardownAudio();
-      await window.bolo.stopSession();
-      dispatch({ type: 'start-failed', error: (err as Error).message });
-    }
-  }, [state.app?.settings, files, stop, teardownAudio]);
+  // `eventKey`: a calendar meeting, whose title, people and agenda the call takes on.
+  const start = useCallback(
+    async (eventKey?: string) => {
+      const settings = state.app?.settings;
+      if (!settings) return;
+      if (settings.audioMode === 'file' && !files.me && !files.them) {
+        dispatch({ type: 'panel', panel: 'settings' });
+        dispatch({
+          type: 'notice',
+          level: 'error',
+          message: 'Choose WAV files to replay (or click Demo) under Settings → Audio.',
+        });
+        return;
+      }
+      dispatch({ type: 'starting' });
+      const res = await window.bolo.startSession(eventKey);
+      if (!res.ok) {
+        dispatch({ type: 'start-failed', error: res.error });
+        return;
+      }
+      setStartedAt(Date.now());
+      try {
+        for (const s of SPEAKERS) ports.current[s] = await openAudioPort(s);
+        const sink: AudioSink = {
+          frame: (speaker, f) => {
+            const p = ports.current[speaker];
+            if (p) postFrame(p, f);
+          },
+          level: (speaker, level) => {
+            // Throttle meter updates to ~12/s per speaker.
+            const now = performance.now();
+            if (now - levelTimer.current[speaker] < 80 && level > 0) return;
+            levelTimer.current[speaker] = now;
+            dispatch({ type: 'level', speaker, level });
+          },
+        };
+        source.current =
+          settings.audioMode === 'file'
+            ? new FileReplay(files, sink, {
+                speed: settings.replaySpeed,
+                audible: settings.replayAudible,
+                onEnd: () => {
+                  dispatch({
+                    type: 'notice',
+                    level: 'info',
+                    message: 'Replay finished — wrapping up…',
+                  });
+                  // Give the last utterance and its answer time to come back before stopping.
+                  setTimeout(() => void stop(), 2500);
+                },
+              })
+            : new LiveCapture(sink, {
+                micDeviceId: settings.micDeviceId,
+                onWarning: (message) => dispatch({ type: 'notice', level: 'error', message }),
+              });
+        await source.current.start();
+        dispatch({ type: 'capturing', capturing: true });
+      } catch (err) {
+        teardownAudio();
+        await window.bolo.stopSession();
+        dispatch({ type: 'start-failed', error: (err as Error).message });
+      }
+    },
+    [state.app?.settings, files, stop, teardownAudio],
+  );
 
   const loadDemo = useCallback(async () => {
     const demo = await window.bolo.readDemoAudio();
@@ -233,6 +247,34 @@ export function App() {
 
       {state.clickThrough && (
         <div className="strip warn">Click-through on — Ctrl+Shift+M to use Bolo</div>
+      )}
+      {offer && !state.running && !state.starting && !needsConsent && (
+        <div className="strip calendar-offer" role="status">
+          <span className="mention-text">
+            <strong>{offer.event.title}</strong> · {startsInLabel(offer.startsInMs)}
+            {offer.event.attendees.length > 0 &&
+              ` · with ${offer.event.attendees.slice(0, 3).join(', ')}${offer.event.attendees.length > 3 ? ` +${offer.event.attendees.length - 3}` : ''}`}
+          </span>
+          {offer.event.joinUrl && (
+            <button
+              className="ghost small"
+              onClick={() => window.bolo.openJoinLink(offer.event.key)}
+              title="Open the meeting link in your browser"
+            >
+              Join
+            </button>
+          )}
+          <button className="ghost small primary-ish" onClick={() => void start(offer.event.key)}>
+            Start with Bolo
+          </button>
+          <button
+            className="icon"
+            title="Not for this meeting"
+            onClick={() => setDismissedEvents((d) => new Set(d).add(offer.event.key))}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
       )}
       {state.mention && (
         <div className={`strip mention ${state.mention.asked ? 'asked' : ''}`} role="alert">
@@ -385,6 +427,9 @@ export function App() {
                 context={app.context}
                 settings={s}
                 memoryMeetings={app.memoryMeetings}
+                calendar={app.calendar}
+                running={state.running}
+                onStartEvent={(key) => void start(key)}
                 onChange={(p) => void updateSettings(p)}
               />
             )}

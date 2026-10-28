@@ -13,6 +13,7 @@ import {
 } from '../../shared/meeting.ts';
 import type { MeetingMode } from '../../shared/settings.ts';
 import { cleanText } from '../../shared/transcript/format.ts';
+import { cleanSpeakerName, type SpeakerNames } from '../../shared/speakers.ts';
 import { tokenize } from '../context/context.ts';
 import { parseActionItems } from '../minutes/minutes.ts';
 import type { SessionRecord } from '../session/types.ts';
@@ -35,20 +36,30 @@ export interface StoredMeeting {
   notes: string;
   minutes?: StoredMinutes;
   minutesError?: string;
+  /** Names on the "them" side (see shared/speakers.ts). */
+  speakers?: SpeakerNames;
 }
 
 export function meetingId(startedAt: number): string {
   return `m${Math.round(startedAt)}`;
 }
 
-export function newMeeting(record: SessionRecord): StoredMeeting {
+/**
+ * A finished session as a library entry. A meeting started from the calendar keeps the
+ * invite's title, and a 1:1 invite names the other side.
+ */
+export function newMeeting(record: SessionRecord, myName = ''): StoredMeeting {
+  const others = (record.attendees ?? []).filter(
+    (a) => a.trim().toLowerCase() !== myName.trim().toLowerCase(),
+  );
   return {
     version: 1,
     id: meetingId(record.startedAt),
-    title: defaultMeetingTitle(record.startedAt),
-    titleEdited: false,
+    title: record.title?.trim() || defaultMeetingTitle(record.startedAt),
+    titleEdited: !!record.title?.trim(),
     record,
     notes: '',
+    ...(others.length === 1 ? { speakers: { them: others[0] } } : {}),
   };
 }
 
@@ -63,6 +74,9 @@ function searchText(m: StoredMeeting): string {
     m.minutes?.markdown ?? '',
     m.notes,
     m.record.contextNote,
+    ...(m.record.attendees ?? []),
+    m.speakers?.them ?? '',
+    ...Object.values(m.speakers?.byLine ?? {}),
     ...m.record.segments.map((s) => s.text),
   ].join('\n');
 }
@@ -120,6 +134,8 @@ export function toDetail(m: StoredMeeting, writing: boolean): MeetingDetail {
     minutesView: m.minutes,
     minutesError: m.minutesError,
     pauses: m.record.pauses ?? [],
+    speakers: m.speakers ?? {},
+    attendees: m.record.attendees ?? [],
   };
 }
 
@@ -180,6 +196,23 @@ export function parseStoredMeeting(json: unknown): StoredMeeting | null {
           }
         : undefined,
     minutesError: typeof m.minutesError === 'string' ? m.minutesError : undefined,
+    speakers: parseSpeakers(m.speakers),
+  };
+}
+
+function parseSpeakers(v: unknown): SpeakerNames | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const s = v as Record<string, unknown>;
+  const byLine: Record<string, string> = {};
+  if (s['byLine'] && typeof s['byLine'] === 'object')
+    for (const [id, name] of Object.entries(s['byLine'] as Record<string, unknown>))
+      if (typeof name === 'string' && cleanSpeakerName(name)) byLine[id] = cleanSpeakerName(name);
+  return {
+    them: typeof s['them'] === 'string' ? cleanSpeakerName(s['them']) || undefined : undefined,
+    byLine,
+    guessed: Array.isArray(s['guessed'])
+      ? s['guessed'].filter((id): id is string => typeof id === 'string' && id in byLine)
+      : [],
   };
 }
 

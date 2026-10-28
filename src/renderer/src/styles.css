@@ -727,3 +727,24 @@ label.inline input {
 .chip.chip-meeting {
   color: var(--accent);
 }
+
+/* ---- Calendar ---- */
+.strip.calendar-offer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-color: rgba(138, 184, 255, 0.45);
+}
+.strip.calendar-offer strong {
+  color: var(--accent);
+}
+button.primary-ish {
+  color: var(--accent);
+  border-color: rgba(138, 184, 255, 0.45);
+}
+.events li {
+  align-items: center;
+}
+.calendar input[type='url'] {
+  width: 100%;
+}

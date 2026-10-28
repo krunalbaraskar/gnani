@@ -20,6 +20,7 @@ const app: AppState = {
   sessionRunning: false,
   sessionPaused: false,
   memoryMeetings: 0,
+  calendar: { configured: false, events: [] },
   demoAudioDir: '/tmp/demo',
   context: { dir: '', files: [], skipped: [] },
   shareProtection: 'unverified',

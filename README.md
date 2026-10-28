@@ -38,6 +38,13 @@ answers when you ask · **Active**: also answers their questions on its own), wi
   or chat, open them in your mail app, or save them as PDF or Markdown.
 - **Ask your meetings.** "What rate did we agree with Mehta?" is answered from all your
   saved meetings, with a link to the one it came from.
+- **Who said what.** Name the other side, or let Bolo suggest a name for each line from
+  the conversation ("Thanks, Rohan"). It only uses names that were invited or actually
+  said, and marks its guesses until you confirm them.
+
+**Your calendar**, read-only from its private iCal link or an `.ics` file: Bolo offers
+"Mehta follow-up · starts in 3 min · Start with Bolo", and a meeting started that way
+takes the invite's title, people and agenda into its answers and minutes.
 
 Built for sales reps, small business owners, brokers, agents and anyone who takes meetings
 in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
@@ -76,8 +83,9 @@ Checked on Windows 11 (build 26100) on 2026-10-09.
 | Meaning line for mixed-language speech                            | Done, unit-tested                                                                                                                              |
 | Modes (Silent / Assist / Active) and pause                        | Done, unit-tested                                                                                                                              |
 | Past meetings in answers, ask your meetings, catch-up, alerts     | Done, unit-tested and end to end with the mock model (2026-10-26)                                                                              |
+| Calendar (iCal link or file), speaker names, guessing speakers    | Done, unit-tested and end to end with an .ics file and the mock model (2026-10-28). Not yet tried with a real Google/Outlook link              |
 | Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested; minutes not yet written by a real model, only the mock (2026-10-26)                                                         |
-| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-26) against the mock Gnani and mock AI servers: 44 checks, `npm run test:e2e`                                   |
+| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-28) against the mock Gnani and mock AI servers: 49 checks, `npm run test:e2e`                                   |
 | Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                 |
 | Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share              |
 | Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                             |
@@ -260,6 +268,25 @@ press Enter to **ask your meetings**; transcripts are searched too.
 one, a strip shows the line; if it was a question, an **Answer** button, and a hidden
 overlay comes back. Speech-to-text may write names in another script (Hindi writes Krunal
 as क्रुणाल), so add that spelling as a watch word. Matching is plain text, no AI.
+
+**Calendar.** In **Context → Calendar**, paste your calendar's private iCal link
+(Google Calendar: Settings → your calendar → _Secret address in iCal format_; Outlook:
+Settings → Calendar → Shared calendars → _Publish a calendar_ → ICS) or choose an `.ics`
+file. Bolo reads it every 10 minutes, never writes to it, and lists today's and
+tomorrow's meetings. Ten minutes before one starts, a strip offers **Start with Bolo**
+(and **Join** for a Meet, Zoom or Teams link). A call started that way is saved under the
+invite's title; the invited people and the invite's description (as the agenda) go into
+answers and minutes; and a 1:1 invite names "Them" for you. Recurring meetings, time
+zones (Outlook's Windows zone names included), moved and cancelled occurrences are
+handled; "second Tuesday of the month" style rules show only their first date.
+
+**Who said what.** Speech-to-text hears two channels: your microphone ("Me") and
+everyone else ("Them"). In the library's **Transcript** tab, name the other side (**They
+are**), pick a name for any line, or press **Guess who said what**: the AI names lines
+from cues in the conversation, keeps only names that were invited or said aloud, and
+marks each guess (_Mehta ?_) until you pick it. Names you set are never overwritten.
+Minutes, search and "ask your meetings" use the names; press **Rewrite** in Minutes to
+apply new ones.
 
 **The shield** is green and reads "Hidden from screen share" only on a Windows build
 where that was checked. Anywhere else it is amber: "May be visible when sharing".
@@ -468,8 +495,15 @@ they say. `<think>` blocks from reasoning models are stripped. Screen reading us
   `media` and `display-capture` permissions are granted.
 - First-run notice says what is sent where, and reminds you to get the other party's
   consent before recording.
+- **The calendar is read, never written.** The iCal link is fetched over https only; the
+  windows get titles, times and names, and an invite's description stays in the main
+  process until a call is started from it. A **Join** button opens only the Meet, Zoom or
+  Teams https link found in the invite.
+- **Meetings are saved on this computer** (`%APPDATA%\Bolo\meetings`), one JSON file
+  each, until you delete them in the library. A copy goes to an export folder only if
+  you set one.
 - Fixtures, demo audio and demo files are synthetic. No real personal data is used
-  anywhere. Transcripts are saved only to the folder you choose.
+  anywhere.
 
 ## Testing
 
@@ -539,6 +573,8 @@ src/
     settings.ts      settings schema + validation
     ipc.ts           IPC channel names and event types
     meeting.ts       meeting library types
+    speakers.ts      speaker names for "them" lines, participants
+    calendar.ts      calendar view types, "starting soon"
     markdown.ts      escaping Markdown renderer for the minutes
   core/              Node-only logic, no Electron imports (testable)
     stt/             SttProvider, Gnani protocol adapter + provider, backoff
@@ -546,12 +582,14 @@ src/
     context/         reference files: decode, chunk, select
     suggest/         prompt builder, answer checks, SuggestionEngine
     gloss/           meaning line for mixed-language speech
-    session/         CopilotSession (modes, pause, catch-up), name/watch-word alerts, export
+    session/         CopilotSession (modes, pause, catch-up, calendar meeting), alerts, export
+    calendar/        iCalendar parser: time zones, recurrence, exceptions
     minutes/         minutes of the meeting: prompts, long-meeting map/reduce, figure check, PDF page
     meetings/        meeting library: file store, search, MeetingService, past meetings
-                     as answer context, "ask your meetings"
+                     as answer context, "ask your meetings", guessing speakers
   main/              Electron main: overlay + library windows, hotkeys, IPC, permissions,
-                     settings store, context folder loader, screen capture, PDF export
+                     settings store, context folder loader, screen capture, PDF export,
+                     calendar reader
   preload/           contextBridge API
   renderer/          React overlay (bar, tabs, answer card), meeting library (#library),
                      AudioWorklet, live capture, file replay

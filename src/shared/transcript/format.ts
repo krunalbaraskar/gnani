@@ -6,6 +6,8 @@ export interface FormatOptions {
   startAt?: number;
   /** Consecutive segments of one speaker closer than this are merged into one line. */
   mergeGapMs: number;
+  /** A name for one line, overriding `labels` (e.g. who in "Them" said it). */
+  nameOf?: (seg: TranscriptSegment) => string | undefined;
 }
 
 const DEFAULTS: FormatOptions = {
@@ -44,20 +46,19 @@ export function formatTranscript(
   options: Partial<FormatOptions> = {},
 ): string {
   const opts = { ...DEFAULTS, ...options, labels: { ...DEFAULTS.labels, ...options.labels } };
-  const lines: { speaker: Speaker; at: number; lastAt: number; text: string }[] = [];
+  const lines: { name: string; at: number; lastAt: number; text: string }[] = [];
   for (const seg of segments) {
     const text = cleanText(seg.text);
     if (!text) continue;
+    const name = opts.nameOf?.(seg) || opts.labels[seg.speaker];
     const prev = lines[lines.length - 1];
-    if (prev && prev.speaker === seg.speaker && seg.at - prev.lastAt <= opts.mergeGapMs) {
+    if (prev && prev.name === name && seg.at - prev.lastAt <= opts.mergeGapMs) {
       prev.text += ' ' + text;
       prev.lastAt = seg.at;
     } else {
-      lines.push({ speaker: seg.speaker, at: seg.at, lastAt: seg.at, text });
+      lines.push({ name, at: seg.at, lastAt: seg.at, text });
     }
   }
   const start = opts.startAt ?? segments[0]?.at ?? 0;
-  return lines
-    .map((l) => `[${formatClock(l.at - start)}] ${opts.labels[l.speaker]}: ${l.text}`)
-    .join('\n');
+  return lines.map((l) => `[${formatClock(l.at - start)}] ${l.name}: ${l.text}`).join('\n');
 }

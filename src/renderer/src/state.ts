@@ -247,6 +247,8 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
     case 'open-meeting':
     case 'ask-progress':
       return state; // for the library window
+    case 'calendar':
+      return state.app ? { ...state, app: { ...state.app, calendar: e.calendar } } : state;
     case 'memory-updated':
       return state.app ? { ...state, app: { ...state.app, memoryMeetings: e.meetings } } : state;
   }

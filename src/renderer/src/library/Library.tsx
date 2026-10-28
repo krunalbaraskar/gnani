@@ -6,6 +6,7 @@ import type {
   MeetingSummary,
   MinutesProgressView,
 } from '../../../shared/meeting.ts';
+import { MAX_SPEAKER_NAME, speakerOf } from '../../../shared/speakers.ts';
 import { formatClock } from '../../../shared/transcript/format.ts';
 import { Icon } from '../components/Icon.tsx';
 import { MODE_INFO } from '../components/Bar.tsx';
@@ -396,7 +397,7 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
         {tab === 'minutes' && (
           <MinutesPane m={m} progress={progress} onChanged={onChanged} toast={toast} />
         )}
-        {tab === 'transcript' && <TranscriptPane m={m} />}
+        {tab === 'transcript' && <TranscriptPane m={m} onChanged={onChanged} toast={toast} />}
         {tab === 'notes' && <NotesPane m={m} onChanged={onChanged} />}
       </div>
     </article>
@@ -551,7 +552,104 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
   );
 }
 
-function TranscriptPane({ m }: { m: MeetingDetail }) {
+/** Who said one "them" line: pick a known name, type another, or go back to "Them". */
+function SpeakerPicker({
+  m,
+  segId,
+  names,
+  onChanged,
+}: {
+  m: MeetingDetail;
+  segId: string;
+  names: string[];
+  onChanged: (m: MeetingDetail) => void;
+}) {
+  const [typing, setTyping] = useState(false);
+  const current = speakerOf({ id: segId, speaker: 'them' }, '', m.speakers);
+  const guessed = m.speakers.guessed?.includes(segId);
+  const save = async (name: string) => {
+    setTyping(false);
+    const next = await window.bolo.updateMeeting(m.id, { lineSpeaker: { id: segId, name } });
+    if (next) onChanged(next);
+  };
+  if (typing)
+    return (
+      <input
+        className="who-input"
+        autoFocus
+        maxLength={MAX_SPEAKER_NAME}
+        placeholder="Name"
+        aria-label="Who said this"
+        onBlur={(e) => (e.target.value.trim() ? void save(e.target.value) : setTyping(false))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') setTyping(false);
+        }}
+      />
+    );
+  return (
+    <select
+      className={`who-pick ${guessed ? 'guessed' : ''}`}
+      value={current}
+      title={guessed ? 'Guessed by Bolo. Pick a name to confirm or change it.' : 'Who said this'}
+      aria-label="Who said this"
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === '\u0000other') setTyping(true);
+        else void save(v === 'Them' ? '' : v);
+      }}
+    >
+      {[...new Set([current, ...names, 'Them'])].map((n) => (
+        <option key={n} value={n}>
+          {n}
+          {n === current && guessed ? ' ?' : ''}
+        </option>
+      ))}
+      <option value={'\u0000other'}>Someone else…</option>
+    </select>
+  );
+}
+
+function TranscriptPane({
+  m,
+  onChanged,
+  toast,
+}: {
+  m: MeetingDetail;
+  onChanged: (m: MeetingDetail) => void;
+  toast: (text: string, error?: boolean) => void;
+}) {
+  const [them, setThem] = useState(m.speakers.them ?? '');
+  const [guessing, setGuessing] = useState(false);
+  useEffect(() => setThem(m.speakers.them ?? ''), [m.speakers.them]);
+  const names = useMemo(
+    () =>
+      [
+        ...new Set(
+          [...m.attendees, m.speakers.them ?? '', ...Object.values(m.speakers.byLine ?? {})]
+            .map((n) => n.trim())
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
+    [m.attendees, m.speakers],
+  );
+  const saveThem = async () => {
+    if (them.trim() === (m.speakers.them ?? '')) return;
+    const next = await window.bolo.updateMeeting(m.id, { themName: them });
+    if (next) onChanged(next);
+  };
+  const guess = async () => {
+    setGuessing(true);
+    const r = await window.bolo.guessSpeakers(m.id);
+    setGuessing(false);
+    if ('error' in r) toast(r.error, true);
+    else
+      toast(
+        r.named
+          ? `Named ${r.named} line${r.named === 1 ? '' : 's'}. Guesses are marked ?; pick a name to confirm.`
+          : 'No names could be told from the conversation.',
+      );
+  };
   const items = useMemo(() => {
     type Item =
       | { kind: 'line'; at: number; seg: MeetingDetail['segments'][number] }
@@ -569,6 +667,26 @@ function TranscriptPane({ m }: { m: MeetingDetail }) {
   if (!m.segments.length) return <p className="muted">Nothing was transcribed.</p>;
   return (
     <div className="lib-transcript">
+      <div className="speakers-bar">
+        <label className="inline">
+          They are
+          <input
+            type="text"
+            value={them}
+            maxLength={MAX_SPEAKER_NAME}
+            placeholder="Them — e.g. Mehta Hardware"
+            onChange={(e) => setThem(e.target.value)}
+            onBlur={() => void saveThem()}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        </label>
+        <button className="ghost small" disabled={guessing} onClick={() => void guess()}>
+          <Icon name="sparkle" size={14} /> {guessing ? 'Working it out…' : 'Guess who said what'}
+        </button>
+        <span className="muted small">
+          Speech-to-text hears you and “them”. Name them here, or line by line.
+        </span>
+      </div>
       {items.map((it, i) =>
         it.kind === 'line' ? (
           <div
@@ -576,7 +694,11 @@ function TranscriptPane({ m }: { m: MeetingDetail }) {
             className={`tline ${it.seg.speaker} ${it.seg.mentions ? 'mentioned' : ''}`}
           >
             <span className="t">{formatClock(it.at - m.startedAt)}</span>
-            <span className="who">{it.seg.speaker === 'me' ? 'Me' : 'Them'}</span>
+            {it.seg.speaker === 'me' ? (
+              <span className="who">Me</span>
+            ) : (
+              <SpeakerPicker m={m} segId={it.seg.id} names={names} onChanged={onChanged} />
+            )}
             <span className="text">
               {it.seg.text}
               {it.seg.meaning && <em className="meaning">{it.seg.meaning}</em>}

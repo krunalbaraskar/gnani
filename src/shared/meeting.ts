@@ -1,6 +1,7 @@
 /** Meetings as the library window sees them. Types and pure helpers only. */
 import type { SuggestionView } from './ipc.ts';
 import type { MeetingMode } from './settings.ts';
+import type { SpeakerNames } from './speakers.ts';
 import type { TranscriptSegment } from './transcript/types.ts';
 
 /** m + start time in ms; the only ids the main process accepts from a renderer. */
@@ -38,6 +39,9 @@ export interface MeetingDetail extends MeetingSummary {
   minutesView?: MinutesView;
   minutesError?: string;
   pauses: { from: number; to: number }[];
+  speakers: SpeakerNames;
+  /** From the calendar invite, if the meeting was started from one. */
+  attendees: string[];
 }
 
 /** Partial update from the library. Only these fields can be changed by a renderer. */
@@ -45,6 +49,10 @@ export interface MeetingPatch {
   title?: string;
   notes?: string;
   minutes?: string;
+  /** Name for everyone on the "them" side; '' clears it. */
+  themName?: string;
+  /** One "them" line's speaker; name '' clears it. Confirms a guess. */
+  lineSpeaker?: { id: string; name: string };
 }
 
 export type MinutesProgressView =

@@ -375,3 +375,34 @@ describe('CopilotSession mentions and catch-up', () => {
     await session.stop();
   });
 });
+
+describe('CopilotSession from a calendar meeting', () => {
+  it('records the invite and tells the model its title, people and agenda', async () => {
+    const { fake } = fakeStt();
+    const prompts: string[] = [];
+    const session = new CopilotSession({
+      stt: fake,
+      llm: () => ({
+        name: 'fake',
+        async *streamChat(req) {
+          prompts.push(JSON.stringify(req.messages));
+          yield 'Ji.';
+        },
+      }),
+      settings: () => ({ ...DEFAULT_SETTINGS, contextNote: 'I sell paint' }),
+      events: recordEvents().events,
+      meeting: { title: 'Mehta follow-up', attendees: ['Rohan'], agenda: 'Confirm the quotation' },
+    });
+    session.start();
+    await session.ask('what is on the agenda?');
+    const record = await session.stop();
+    expect(record).toMatchObject({ title: 'Mehta follow-up', attendees: ['Rohan'] });
+    expect(record.contextNote).toBe(
+      'I sell paint\nMeeting: Mehta follow-up\nInvited: Rohan\nAgenda (from the invite):\nConfirm the quotation',
+    );
+    // The prompt was recorded as JSON, where a line break is written \n.
+    expect(prompts[0]).toContain(
+      JSON.stringify('Agenda (from the invite):\nConfirm the quotation').slice(1, -1),
+    );
+  });
+});

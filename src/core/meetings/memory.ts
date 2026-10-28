@@ -2,6 +2,7 @@
  * Past meetings as reference material: their minutes and the user's notes become chunks
  * that answers can cite, exactly like files in the context folder.
  */
+import { speakerOf } from '../../shared/speakers.ts';
 import { formatTranscript } from '../../shared/transcript/format.ts';
 import { chunkText, type Chunk } from '../context/context.ts';
 import { speakerLabels } from '../minutes/minutes.ts';
@@ -65,6 +66,7 @@ export function meetingTranscriptChunks(
     const text = formatTranscript(m.record.segments, {
       labels: speakerLabels(myName),
       startAt: m.record.startedAt,
+      nameOf: (seg) => speakerOf(seg, myName, m.speakers),
     });
     if (text) out.push(...chunkText(meetingSourceName(m, ' transcript'), text));
   }

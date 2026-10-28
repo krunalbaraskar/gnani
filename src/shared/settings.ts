@@ -24,6 +24,13 @@ export interface Settings {
    * spellings of my name). My name always counts.
    */
   watchWords: string;
+  /**
+   * The calendar's private iCal link (https:// or webcal://), e.g. Google Calendar's
+   * "Secret address in iCal format". Read only; '' = none.
+   */
+  calendarUrl: string;
+  /** An .ics file instead of a link. Set only via the file dialog. */
+  calendarFile: string;
   /** Gnani language code (see GNANI_LANGUAGES). */
   sttLanguage: string;
   /** Numbers, currency and dates as digits (Gnani ITN; Hindi and English only). */
@@ -79,6 +86,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoMinutes: true,
   useMeetings: true,
   watchWords: '',
+  calendarUrl: '',
+  calendarFile: '',
   sttLanguage: 'hi-IN',
   formatNumbers: false,
   outputLanguage: 'same',
@@ -149,6 +158,15 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
     myName: pick(i['myName'], d.myName, (v) => isString(v) && (v as string).length <= 80),
     autoMinutes: pick(i['autoMinutes'], d.autoMinutes, isBool),
     useMeetings: pick(i['useMeetings'], d.useMeetings, isBool),
+    calendarUrl: pick(
+      i['calendarUrl'],
+      d.calendarUrl,
+      (v) =>
+        isString(v) &&
+        (v === '' ||
+          (/^(https|webcal):\/\/[^\s]+$/i.test(v as string) && (v as string).length <= 2000)),
+    ),
+    calendarFile: pick(i['calendarFile'], d.calendarFile, isString),
     watchWords: pick(
       i['watchWords'],
       d.watchWords,

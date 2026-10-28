@@ -1,4 +1,5 @@
 /** Types and channel names shared by main, preload and renderer. No runtime deps. */
+import type { CalendarView } from './calendar.ts';
 import type { MeetingSummary, MinutesProgressView } from './meeting.ts';
 import type { Settings } from './settings.ts';
 import type { Speaker, TranscriptSegment } from './transcript/types.ts';
@@ -19,6 +20,10 @@ export const IPC = {
   requestMeaning: 'bolo:request-meaning',
   catchUp: 'bolo:catch-up',
   askMeetings: 'bolo:ask-meetings',
+  guessSpeakers: 'bolo:guess-speakers',
+  chooseCalendarFile: 'bolo:choose-calendar-file',
+  refreshCalendar: 'bolo:refresh-calendar',
+  openJoinLink: 'bolo:open-join-link',
   setPaused: 'bolo:set-paused',
   openLibrary: 'bolo:open-library',
   listMeetings: 'bolo:list-meetings',
@@ -79,6 +84,7 @@ export interface AppState {
   context: ContextView;
   /** Past meetings whose minutes or notes answers can use (when useMeetings is on). */
   memoryMeetings: number;
+  calendar: CalendarView;
   shareProtection: ShareProtection;
 }
 
@@ -131,7 +137,8 @@ export type BoloEvent =
   | { type: 'minutes-progress'; id: string; progress: MinutesProgressView }
   | { type: 'open-meeting'; id: string }
   | { type: 'ask-progress'; askId: number; text: string }
-  | { type: 'memory-updated'; meetings: number };
+  | { type: 'memory-updated'; meetings: number }
+  | { type: 'calendar'; calendar: CalendarView };
 
 export type StartResult = { ok: true } | { ok: false; error: string };
 

@@ -1,6 +1,6 @@
 import type { LoadedContext } from '../core/context/context.ts';
 import { OpenAiCompatibleProvider } from '../core/llm/openai-compatible.ts';
-import { CopilotSession } from '../core/session/copilot-session.ts';
+import { CopilotSession, type MeetingInfo } from '../core/session/copilot-session.ts';
 import type { SessionRecord } from '../core/session/types.ts';
 import { GNANI_LANGUAGES } from '../core/stt/gnani-protocol.ts';
 import { GnaniSttProvider } from '../core/stt/gnani-provider.ts';
@@ -66,7 +66,8 @@ export class SessionController {
     this.emit({ type: 'paused', paused: s.isPaused });
   }
 
-  start(): StartResult {
+  /** `meeting`: the calendar meeting this call is for, when started from the calendar. */
+  start(meeting?: MeetingInfo): StartResult {
     if (this.running) return { ok: true };
     const env = this.getEnv();
     if (env.sttProvider === 'gnani' && !env.gnaniApiKey) {
@@ -98,6 +99,7 @@ export class SessionController {
       llm: () => llm(false),
       llmVision: () => llm(true),
       context: this.getContext,
+      meeting,
       myLanguageLabel: () => languageName(this.getSettings().myLanguage),
       settings: this.getSettings,
       logger: this.log,

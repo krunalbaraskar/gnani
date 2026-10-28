@@ -24,6 +24,15 @@ export function demoReply(body: Body): string {
     (m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'),
   );
 
+  // "Guess who said what" (see src/core/meetings/speakers.ts): Mehta Hardware introduce themselves.
+  if (system.includes('who said each line')) {
+    return user
+      .split('\n')
+      .map((l) => /^(\d+) \[them\]/.exec(l)?.[1])
+      .filter(Boolean)
+      .map((n) => `${n}: Mehta`)
+      .join('\n');
+  }
   // "Catch me up" (see buildCatchupMessages).
   if (system.includes('lost track of it')) {
     return [

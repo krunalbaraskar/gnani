@@ -25,6 +25,33 @@ const home = mkdtempSync(join(tmpdir(), 'bolo-e2e-'));
 const exportDir = join(home, 'exports');
 const contextDir = join(repo, 'demo-context');
 const shots = join(repo, 'test-results', 'e2e');
+
+// A calendar with one invite starting in three minutes (see "Start with Bolo" below).
+const icsTime = (ms) =>
+  new Date(ms)
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '');
+const calendarFile = join(home, 'calendar.ics');
+const inviteStart = Date.now() + 3 * 60_000;
+writeFileSync(
+  calendarFile,
+  [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'BEGIN:VEVENT',
+    'UID:mehta-follow-up',
+    'SUMMARY:Mehta follow-up',
+    `DTSTART:${icsTime(inviteStart)}`,
+    `DTEND:${icsTime(inviteStart + 30 * 60_000)}`,
+    'DESCRIPTION:Confirm the quotation sent on WhatsApp',
+    'ORGANIZER;CN=Krunal:mailto:krunal@example.com',
+    'ATTENDEE;CN=Mehta Hardware:mailto:orders@mehta.example.com',
+    'LOCATION:https://meet.google.com/abc-defg-hij',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n'),
+);
 mkdirSync(shots, { recursive: true });
 
 // Electron's userData = <appData>/Bolo. Pre-seed settings so no dialogs block the run.
@@ -43,6 +70,7 @@ writeFileSync(
     mode: 'active',
     myName: 'Krunal',
     watchWords: 'Mehta Hardware',
+    calendarFile,
   }),
 );
 
@@ -125,6 +153,18 @@ try {
   await page.getByText('Before you record a call').waitFor();
   await shot('1-consent');
   await page.getByRole('button', { name: /I understand/ }).click();
+
+  // The calendar invite is offered: title, when, who; waved away for now.
+  const offer = page.locator('.calendar-offer');
+  await offer.getByText(/Mehta follow-up/).waitFor({ timeout: 10000 });
+  check(
+    /starts in [23] min · with Krunal, Mehta Hardware/.test(await offer.innerText()) &&
+      (await offer.getByRole('button', { name: 'Join' }).count()) === 1,
+    'invite starting soon is offered with its people and join link',
+  );
+  await shot('1b-calendar-offer');
+  await offer.getByTitle('Not for this meeting').click();
+  await offer.waitFor({ state: 'detached' });
   await page.getByText('Keys (from .env').waitFor();
   await page.getByRole('img', { name: 'Visible in recordings (demo mode)' }).waitFor();
   check(true, 'demo mode is announced while content protection is off');
@@ -133,6 +173,8 @@ try {
   await page.getByRole('tab', { name: 'Context' }).click();
   await page.getByText('inventory.csv').waitFor();
   await page.getByText('10 rows').waitFor();
+  await page.locator('.events', { hasText: 'Mehta follow-up' }).waitFor();
+  check(true, "today's meetings listed from the calendar file");
   await shot('2-context');
   const state = await page.evaluate(() => window.bolo.getState());
   check(
@@ -301,6 +343,29 @@ try {
   await lib.getByRole('tab', { name: 'Transcript' }).click();
   await lib.getByText(THEM_LINES.question.text).waitFor();
   check(true, 'library shows the transcript');
+
+  // Name the other side, then let Bolo guess line by line.
+  await lib.getByPlaceholder(/Them — e.g./).fill('Mehta Hardware');
+  await lib.getByPlaceholder(/Them — e.g./).press('Enter');
+  check(
+    await lib
+      .waitForFunction(
+        () => document.querySelector('.who-pick')?.value === 'Mehta Hardware',
+        null,
+        { timeout: 5000 },
+      )
+      .then(() => true)
+      .catch(() => false),
+    'naming Them labels their lines',
+  );
+  await lib.getByRole('button', { name: 'Guess who said what' }).click();
+  await lib.getByText(/^Named 3 lines/).waitFor({ timeout: 8000 });
+  check(
+    (await lib.locator('.who-pick.guessed').count()) === 3 &&
+      (await lib.locator('.who-pick').first().inputValue()) === 'Mehta',
+    'guessed speakers are applied and marked as guesses',
+  );
+  await lib.screenshot({ path: join(shots, '10b-library-speakers.png') });
   await lib.screenshot({ path: join(shots, '10-library-transcript.png') });
 
   await lib.getByLabel('Search meetings').fill('quotation');
@@ -323,8 +388,10 @@ try {
   await lib.getByRole('tab', { name: 'Minutes' }).waitFor();
   check(true, 'asking your meetings answers with a link to the meeting');
 
-  // A second meeting: Bolo now knows the first one and answers from its minutes.
-  await page.getByRole('button', { name: 'Start' }).click();
+  // A second meeting, started from the calendar: it takes the invite's title, people and
+  // agenda, and Bolo answers from the first meeting's minutes.
+  await page.getByRole('tab', { name: 'Context' }).click();
+  await page.locator('.events button', { hasText: 'Start' }).click();
   await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
   await page.getByLabel('Ask Bolo').fill('what did they want on whatsapp?');
   await page.getByLabel('Ask Bolo').press('Enter');
@@ -334,6 +401,17 @@ try {
   await shot('12-past-meeting-answer');
   await page.getByTitle('Stop the call and save').click();
   await page.getByText(/^Meeting saved/).waitFor({ timeout: 20000 });
+  const second = readdirSync(meetingsDir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(readFileSync(join(meetingsDir, f), 'utf8')))
+    .find((m) => m.record.title);
+  check(
+    second?.title === 'Mehta follow-up' &&
+      second.record.attendees.join() === 'Krunal,Mehta Hardware' &&
+      second.speakers?.them === 'Mehta Hardware' &&
+      second.record.contextNote.includes('Confirm the quotation sent on WhatsApp'),
+    'a meeting started from the invite keeps its title, people and agenda, and names Them',
+  );
 
   check(
     gnani.connections.every((c) => c.badFrames === 0) && gnani.connections.length >= 2,
