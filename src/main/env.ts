@@ -21,6 +21,16 @@ export interface BoloEnv {
   opaqueWindow: boolean;
   /** Demo mode: content protection off, so the overlay shows up in screen recordings. */
   recordable: boolean;
+  /** Google Calendar sign-in: a "Desktop app" OAuth client (see README). */
+  googleClientId: string;
+  googleClientSecret: string;
+  /** Outlook / Microsoft 365 sign-in: an app registration with a localhost redirect. */
+  microsoftClientId: string;
+  microsoftTenant: string;
+  /** Development and tests only: a local mock instead of the real sign-in endpoints. */
+  oauthMockBase: string;
+  /** Development and tests only: a file read instead of the microphone registry key. */
+  detectFile: string;
 }
 
 function readEnvFile(path: string): Record<string, string> {
@@ -76,5 +86,12 @@ export function loadEnv(): BoloEnv {
     llmReasoningEffort: (env['LLM_REASONING_EFFORT'] ?? '').trim().toLowerCase(),
     opaqueWindow: env['BOLO_OPAQUE_WINDOW'] === '1',
     recordable: env['BOLO_RECORDABLE'] === '1',
+    googleClientId: env['GOOGLE_CLIENT_ID'] ?? '',
+    googleClientSecret: env['GOOGLE_CLIENT_SECRET'] ?? '',
+    microsoftClientId: env['MICROSOFT_CLIENT_ID'] ?? '',
+    microsoftTenant: env['MICROSOFT_TENANT'] || 'common',
+    // Never in an installed app: tokens must only ever go to the real providers.
+    oauthMockBase: app.isPackaged ? '' : (env['BOLO_OAUTH_MOCK'] ?? ''),
+    detectFile: app.isPackaged ? '' : (env['BOLO_DETECT_FILE'] ?? ''),
   };
 }

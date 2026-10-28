@@ -46,7 +46,10 @@ import {
   OVERLAY_WIDTH,
   setClickThrough,
 } from './overlay-window.ts';
+import { AccountsService } from './accounts.ts';
 import { CalendarService } from './calendar.ts';
+import { MeetingDetector } from './meeting-detect.ts';
+import { googleConfig, microsoftConfig } from '../core/integrations/oauth.ts';
 import { APP_SECTIONS, createMainWindow } from './main-window.ts';
 import { fileStem, writeMinutesPdf } from './minutes-export.ts';
 import { installMediaHandlers } from './permissions.ts';
@@ -141,12 +144,53 @@ void app.whenReady().then(() => {
   };
   void loadContextDir();
   void meetings.refreshMemory();
+  const accounts = new AccountsService({
+    file: join(app.getPath('userData'), 'accounts.bin'),
+    config: (provider) => {
+      const e = loadEnv();
+      const mock = e.oauthMockBase || undefined;
+      if (provider === 'google')
+        return e.googleClientId ? googleConfig(e.googleClientId, e.googleClientSecret, mock) : null;
+      return e.microsoftClientId
+        ? microsoftConfig(e.microsoftClientId, e.microsoftTenant, mock)
+        : null;
+    },
+    onChange: (integrations) => emit({ type: 'integrations', integrations }),
+    log,
+    followAuthUrlDirectly: !!env.oauthMockBase,
+  });
   const calendar = new CalendarService(
     () => settings.get(),
     (view) => emit({ type: 'calendar', calendar: view }),
     log,
+    {
+      hasAccounts: () => accounts.view().accounts.length > 0,
+      events: (f, t) => accounts.events(f, t),
+    },
   );
-  calendar.start();
+  void accounts.load().then(() => {
+    emit({ type: 'integrations', integrations: accounts.view() });
+    calendar.start();
+  });
+
+  const detector = new MeetingDetector({
+    enabled: () => settings.get().autoDetect,
+    selfPaths: [process.execPath],
+    fakeRegistryFile: env.detectFile || undefined,
+    log,
+    onChange: (meeting) => {
+      emit({ type: 'detected', meeting });
+      // The other app let go of the microphone while Bolo is still listening.
+      if (!meeting && controller.running) {
+        emit({
+          type: 'notice',
+          level: 'info',
+          message: 'The call seems to have ended. Press Stop to save the meeting.',
+        });
+      }
+    },
+  });
+  detector.start();
 
   /** What answers are grounded in: the folder's files, then past meetings' minutes. */
   const answerContext = (): LoadedContext | null => {
@@ -213,8 +257,8 @@ void app.whenReady().then(() => {
       context: contextView(s.contextDir, context),
       memoryMeetings: new Set(meetings.memory.map((c) => c.file)).size,
       calendar: calendar.view,
-      integrations: { accounts: [], available: { google: false, microsoft: false } },
-      detected: null,
+      integrations: accounts.view(),
+      detected: detector.meeting,
       // The window's protection was fixed at startup; a later .env edit must not change the claim.
       shareProtection: shareProtection(env.recordable),
     };
@@ -234,6 +278,7 @@ void app.whenReady().then(() => {
     const next = settings.update(safe);
     if (env.opaqueWindow) overlay?.setOpacity(next.overlayOpacity);
     if (next.calendarUrl !== before) void calendar.refresh();
+    void detector.poll(); // autoDetect may have changed
     return next;
   });
 
@@ -273,12 +318,20 @@ void app.whenReady().then(() => {
     return calendar.refresh();
   });
   handle(IPC.refreshCalendar, () => calendar.refresh());
-  // Filled in by the accounts service (OAuth); until then sign-in reports it is unavailable.
-  handle(IPC.connectAccount, (): ConnectResult => ({
-    ok: false,
-    error: 'Calendar sign-in is not available yet.',
-  }));
-  handle(IPC.disconnectAccount, () => undefined);
+  handle(IPC.connectAccount, async (provider: unknown): Promise<ConnectResult> => {
+    if (provider !== 'google' && provider !== 'microsoft')
+      return { ok: false, error: 'Unknown calendar provider.' };
+    const r = await accounts.connect(provider);
+    if (r.ok) void calendar.refresh();
+    // The browser had the focus; bring Bolo back.
+    if (library && !library.isDestroyed()) library.focus();
+    return r;
+  });
+  handle(IPC.disconnectAccount, async (id: unknown) => {
+    if (typeof id !== 'string') return;
+    await accounts.disconnect(id);
+    void calendar.refresh();
+  });
   ipcMain.on(IPC.openJoinLink, (e, key: unknown) => {
     const url = trusted(e) && typeof key === 'string' ? calendar.find(key)?.joinUrl : undefined;
     // Only the https meeting links the parser recognised, never anything else from the file.
@@ -616,6 +669,9 @@ void app.whenReady().then(() => {
   register(HOTKEYS.clickThrough, toggleClickThrough);
   register(HOTKEYS.askScreen, () => void controller.askScreen(capture));
   register(HOTKEYS.catchUp, () => controller.catchUp());
+
+  // The main window opens with the app (first run: its setup steps), unless a test asks not to.
+  if (!process.env['BOLO_NO_MAIN_WINDOW'] || app.isPackaged) openApp('home');
 
   // Quitting mid-call still saves the transcript (if an export folder is set).
   let quitting = false;
