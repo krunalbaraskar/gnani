@@ -152,7 +152,14 @@ try {
   const logs = [];
   page.on('console', (m) => logs.push(`${m.type()}: ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
-  const shot = (name) => page.screenshot({ path: join(shots, `${name}.png`) });
+  const themedShot = async (target, name) => {
+    await target.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+    await target.screenshot({ path: join(shots, `${name}.png`) });
+    await target.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await target.screenshot({ path: join(shots, `${name}-dark.png`) });
+    await target.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  };
+  const shot = (name) => themedShot(page, name);
   const bounds = () =>
     app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()
@@ -390,7 +397,7 @@ try {
     (await lib.locator('.doc').innerText()).includes('With: Krunal, Them'),
     'minutes name the user from "My name"',
   );
-  await lib.screenshot({ path: join(shots, '9-library-minutes.png') });
+  await themedShot(lib, '9-library-minutes');
   const minutesReq = llm.requests.find((r) =>
     JSON.stringify(r.body.messages[0]).includes('You write the minutes'),
   );
@@ -433,8 +440,8 @@ try {
       (await lib.locator('.who-pick').first().inputValue()) === 'Mehta',
     'guessed speakers are applied and marked as guesses',
   );
-  await lib.screenshot({ path: join(shots, '10b-library-speakers.png') });
-  await lib.screenshot({ path: join(shots, '10-library-transcript.png') });
+  await themedShot(lib, '10b-library-speakers');
+  await themedShot(lib, '10-library-transcript');
 
   await lib.getByLabel('Search meetings').fill('quotation');
   await lib.locator('.lib-item').first().waitFor();
@@ -451,7 +458,7 @@ try {
   await lib.getByLabel('Search meetings').press('Enter');
   await lib.getByText('From your meetings').waitFor({ timeout: 8000 });
   await lib.getByText('Mehta Hardware asked for the quotation on WhatsApp.').waitFor();
-  await lib.screenshot({ path: join(shots, '11-ask-meetings.png') });
+  await themedShot(lib, '11-ask-meetings');
   await lib.locator('.ask-sources .chip').first().click();
   await lib.getByRole('tab', { name: 'Minutes' }).waitFor();
   check(true, 'asking your meetings answers with a link to the meeting');
@@ -511,7 +518,7 @@ try {
         .includes('mock-refresh'),
     'tokens never reach a window and are encrypted on disk',
   );
-  await lib.screenshot({ path: join(shots, '13-settings-google.png') });
+  await themedShot(lib, '13-settings-google');
 
   // Another app takes the microphone: the overlay offers to start Bolo.
   writeFileSync(detectFile, zoomOnMic);

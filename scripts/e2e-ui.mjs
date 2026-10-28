@@ -183,6 +183,40 @@ const resize = (width, height) =>
     [width, height],
   );
 const shot = (name) => page.screenshot({ path: join(shots, `${name}.png`) });
+const checkPalette = async () => {
+  const failures = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    const colour = (name) => (name.startsWith('--') ? style.getPropertyValue(name).trim() : name);
+    const luminance = (name) => {
+      const rgb = colour(name)
+        .slice(1)
+        .match(/../g)
+        .map((v) => parseInt(v, 16) / 255);
+      const linear = rgb.map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+    };
+    return [
+      ['--text', '--card'],
+      ['--bold', '--card'],
+      ['--muted', '--card'],
+      ['--muted', '--raise-2'],
+      ['--muted', '--mention'],
+      ['--text', '--asked'],
+      ['--accent', '--card'],
+      ['--accent', '--accent-soft'],
+      ['--ok', '--ok-soft'],
+      ['--ok', '--raise'],
+      ['--warn', '--warn-soft'],
+      ['--danger', '--card'],
+      ['#ffffff', '--primary'],
+    ].flatMap(([fg, bg]) => {
+      const values = [luminance(fg), luminance(bg)].sort((a, b) => a - b);
+      const ratio = (values[1] + 0.05) / (values[0] + 0.05);
+      return ratio >= 4.5 ? [] : [`${fg} on ${bg}: ${ratio.toFixed(2)}`];
+    });
+  });
+  assert.deepEqual(failures, [], 'Text colours must meet 4.5:1 contrast');
+};
 try {
   await page
     .getByText('Good morning, Krunal.')
@@ -222,6 +256,40 @@ try {
     ),
   );
   await shot('home-light');
+  await checkPalette();
+  await page.locator('.recent-meetings').scrollIntoViewIfNeeded();
+  await shot('home-recent-light');
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await shot('home-recent-dark');
+  await page.locator('.home-page').evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await shot('home-desktop-dark');
+  await checkPalette();
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await page.keyboard.press('Control+k');
+  assert(
+    await page
+      .getByRole('combobox', { name: 'Jump to', exact: true })
+      .evaluate((el) => el === document.activeElement),
+  );
+  await page.getByRole('combobox', { name: 'Jump to', exact: true }).fill('Mehta');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.locator('.doc').waitFor();
+  assert.equal(new URL(page.url()).hash, `#app/meetings/${meeting.id}`);
+  await shot('meetings-desktop-light');
+  await page.getByRole('button', { name: 'Meeting information', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Meeting details', exact: true }).waitFor();
+  await shot('meeting-information-light');
+  await page.keyboard.press('Escape');
+  assert(
+    await page
+      .getByRole('button', { name: 'Meeting information', exact: true })
+      .evaluate((el) => el === document.activeElement),
+  );
+  await nav('Home').click();
 
   await emit({ type: 'session', running: true });
   await page.getByText('Listening', { exact: true }).waitFor();
@@ -241,6 +309,13 @@ try {
   await page.getByRole('tab', { name: 'Minutes', exact: true }).click();
   await resize(820, 540);
   await shot('meetings-820-light');
+  await page.getByRole('button', { name: 'Browse meetings', exact: true }).click();
+  await page.getByLabel('Search meetings', { exact: true }).fill('Planning 2');
+  await page.waitForFunction(() => document.querySelectorAll('.lib-item').length === 1);
+  await shot('meeting-browser-820-light');
+  await page.locator('.lib-item').click();
+  await page.locator('.doc').waitFor();
+  assert(await page.getByRole('button', { name: 'Browse meetings', exact: true }).isVisible());
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 
   await nav('Home').click();
@@ -254,11 +329,15 @@ try {
   await nav('Ask').click();
   assert.equal(await page.locator('.question-bubble').count(), 1);
   await shot('ask-820-light');
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await shot('ask-820-dark');
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
 
   await emit({ type: 'navigate', section: 'settings' });
   const settingsNav = page.getByRole('navigation', { name: 'Settings sections', exact: true });
   await page.getByLabel('My name', { exact: true }).fill('Asha');
   await page.getByLabel('My name', { exact: true }).press('Tab');
+  await shot('profile-820-light');
   assert.equal(
     await page.evaluate(async () => (await window.bolo.getState()).settings.myName),
     'Asha',
@@ -272,6 +351,8 @@ try {
   await page.getByText('Sign-in was cancelled. Try again.').waitFor();
   await page.evaluate(() => window.__uiTest.allowConnect());
   await page.getByRole('button', { name: 'Connect Outlook', exact: true }).click();
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor();
+  await shot('calendar-820-light');
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.account-list'));
   await settingsNav.getByRole('button', { name: 'Knowledge', exact: true }).click();
@@ -293,7 +374,7 @@ try {
     await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
     ),
-    '#8b8cff',
+    '#71b6ed',
   );
 
   await emit({ type: 'navigate', section: 'meetings', meetingId: meeting.id });
@@ -304,6 +385,7 @@ try {
   await emit({ type: 'calendar', calendar: { configured: false, events: [] } });
   await emit({ type: 'detected', meeting: { key: 'zoom-1', app: 'Zoom', since: Date.now() } });
   await page.getByText('Zoom call in progress', { exact: true }).waitFor();
+  await shot('home-detected-dark');
   await page.getByRole('button', { name: 'Connect your calendar', exact: true }).click();
   await page.getByRole('heading', { name: 'Calendar & accounts', exact: true }).waitFor();
 
@@ -314,6 +396,9 @@ try {
   await page.reload();
   await page.getByRole('heading', { name: 'Be here. Bolo remembers.', exact: true }).waitFor();
   await shot('onboarding-820-dark');
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await shot('onboarding-820-light');
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await page.getByRole('button', { name: /I understand/ }).click();
   assert.equal(
     await page.evaluate(async () => (await window.bolo.getState()).settings.consentVersion),
@@ -490,13 +575,16 @@ try {
     await page
       .locator('.shell')
       .evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()),
-    '#8b8cff',
+    '#71b6ed',
   );
   await shot('overlay-live-dark');
   await page.getByRole('tab', { name: 'Transcript', exact: true }).click();
   await shot('overlay-transcript-dark');
   await page.getByRole('tab', { name: 'Settings', exact: true }).click();
   await shot('overlay-settings-dark');
+  await page.getByRole('tab', { name: 'Context', exact: true }).click();
+  await shot('overlay-context-dark');
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
   await page.getByTitle('More', { exact: true }).click();
   await shot('overlay-menu-dark');
   await page.keyboard.press('Escape');

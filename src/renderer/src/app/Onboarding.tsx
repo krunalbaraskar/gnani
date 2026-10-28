@@ -41,7 +41,7 @@ export function Onboarding(props: SettingsProps) {
       </div>
       <div className="onboarding-card">
         <header>
-          <p className="eyebrow">Let’s make some room for conversation</p>
+          <p className="eyebrow">Welcome to Bolo</p>
           <ol className="step-dots" aria-label="Setup progress">
             {STEPS.map((label, i) => (
               <li key={label} aria-current={i === step ? 'step' : undefined}>

@@ -24,6 +24,7 @@ export function LiveFeed({ state, themName }: { state: UiState; themName: string
       aria-label="Live conversation"
       {...scroll}
     >
+      {posts.length > 0 && <div className="date-separator">Today</div>}
       {!posts.length && (
         <div className="feed-empty">
           <strong>

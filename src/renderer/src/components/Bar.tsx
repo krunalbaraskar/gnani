@@ -86,12 +86,17 @@ export function Bar({
   return (
     <header className="bar">
       <span className="brand">
-        <Icon name="sparkle" size={17} /> Bolo
+        <span className="brand-tile" aria-hidden>
+          B
+        </span>{' '}
+        Bolo
       </span>
       {state.running ? (
         <button className="bar-main stop" onClick={onStop} title="Stop the call and save">
-          <Icon name="stop" size={12} />
+          <span className={`live-dot ${state.paused ? 'paused-dot' : ''}`} />
+          <span>{state.paused ? 'Paused' : 'Live'}</span>
           <span className="timer">{formatClock(startedAt ? Date.now() - startedAt : 0)}</span>
+          <Icon name="stop" size={12} />
         </button>
       ) : (
         <button className="bar-main start" onClick={onStart} disabled={state.starting}>
@@ -105,6 +110,7 @@ export function Bar({
           className={`icon ${state.paused ? 'on' : ''}`}
           onClick={() => window.bolo.setPaused(!state.paused)}
           aria-pressed={state.paused}
+          aria-label={state.paused ? 'Resume' : 'Pause'}
           title={
             state.paused
               ? 'Paused: nothing is heard or transcribed. Click to resume.'

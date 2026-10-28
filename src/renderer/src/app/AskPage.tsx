@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MeetingAnswerView } from '../../../shared/meeting.ts';
 import { Icon } from '../components/Icon.tsx';
 import { ASK_LABEL } from '../library/Library.tsx';
+import { Avatar } from '../components/Avatars.tsx';
 
 interface Turn {
   id: number;
+  at: number;
   question: string;
   text: string;
   answer?: MeetingAnswerView;
@@ -38,7 +40,7 @@ export function AskPage({
     const question = text.trim();
     if (!question) return;
     const id = ++nextAsk;
-    setTurns((t) => [...t, { id, question, text: '' }]);
+    setTurns((t) => [...t, { id, at: Date.now(), question, text: '' }]);
     setDraft('');
     stick.current = true;
     try {
@@ -96,6 +98,7 @@ export function AskPage({
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         }}
       >
+        {turns.length > 0 && <div className="date-separator">Today</div>}
         {!turns.length ? (
           <div className="ask-welcome">
             <span className="ask-symbol">
@@ -134,51 +137,78 @@ export function AskPage({
             {turns.map((turn) => (
               <article className="chat-turn" key={turn.id}>
                 <div className="question-bubble">
-                  <span className="sr-only">You asked: </span>
-                  {turn.question}
+                  <Avatar name="You" />
+                  <div className="message-body">
+                    <header className="message-header">
+                      <strong>You</strong>
+                      <time className="when">
+                        {new Date(turn.at).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </time>
+                    </header>
+                    <span className="sr-only">You asked: </span>
+                    {turn.question}
+                  </div>
                 </div>
-                <section
-                  className={`ask-answer ask-${turn.answer?.verdict ?? 'pending'}`}
-                  aria-busy={!turn.answer && !turn.error}
-                >
-                  <span className="ask-label">
-                    <Icon name="sparkle" size={14} />{' '}
-                    {turn.error
-                      ? 'Could not answer'
-                      : turn.answer
-                        ? ASK_LABEL[turn.answer.verdict]
-                        : 'Reading your meetings…'}
-                  </span>
-                  <p className={`ask-text ${turn.error ? 'error-text' : ''}`}>
-                    {turn.error ??
-                      turn.answer?.text ??
-                      (turn.text || 'Looking for the conversations that can help…')}
-                    {!turn.answer && !turn.error && <span className="caret" />}
-                  </p>
-                  {!!turn.answer?.sources.length && (
-                    <div className="ask-sources">
-                      {turn.answer.sources.map((source) => (
-                        <button
-                          className="chip"
-                          key={`${source.meetingId}:${source.name}`}
-                          onClick={() => onOpen(source.meetingId)}
-                        >
-                          <Icon name="book" size={12} />
-                          {source.name.replace(/^meeting /, '')}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {turn.error && (
-                    <button
-                      className="small"
-                      disabled={busy}
-                      onClick={() => void send(turn.question)}
+                <div className="ask-bot-post">
+                  <Avatar name="Bolo" />
+                  <div className="message-body">
+                    <header className="message-header">
+                      <strong>Bolo</strong>
+                      <span className="app-tag">APP</span>
+                      <time className="when">
+                        {new Date(turn.at).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </time>
+                    </header>
+                    <section
+                      className={`ask-answer ask-${turn.answer?.verdict ?? 'pending'}`}
+                      aria-busy={!turn.answer && !turn.error}
                     >
-                      Try again
-                    </button>
-                  )}
-                </section>
+                      <span className="ask-label">
+                        <Icon name="sparkle" size={14} />{' '}
+                        {turn.error
+                          ? 'Could not answer'
+                          : turn.answer
+                            ? ASK_LABEL[turn.answer.verdict]
+                            : 'Reading your meetings…'}
+                      </span>
+                      <p className={`ask-text ${turn.error ? 'error-text' : ''}`}>
+                        {turn.error ??
+                          turn.answer?.text ??
+                          (turn.text || 'Looking for the conversations that can help…')}
+                        {!turn.answer && !turn.error && <span className="caret" />}
+                      </p>
+                      {!!turn.answer?.sources.length && (
+                        <div className="ask-sources">
+                          {turn.answer.sources.map((source) => (
+                            <button
+                              className="chip"
+                              key={`${source.meetingId}:${source.name}`}
+                              onClick={() => onOpen(source.meetingId)}
+                            >
+                              <Icon name="book" size={12} />
+                              {source.name.replace(/^meeting /, '')}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {turn.error && (
+                        <button
+                          className="small"
+                          disabled={busy}
+                          onClick={() => void send(turn.question)}
+                        >
+                          Try again
+                        </button>
+                      )}
+                    </section>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
@@ -191,23 +221,27 @@ export function AskPage({
             if (!busy) void send(draft);
           }}
         >
-          <Icon name="sparkle" size={18} />
           <input
             ref={input}
             aria-label="Ask your meetings"
-            placeholder="Ask anything about your meetings…"
+            placeholder="Message Bolo about your meetings"
             value={draft}
             maxLength={1000}
             onChange={(e) => setDraft(e.target.value)}
           />
-          <button
-            className="primary"
-            type="submit"
-            aria-label="Send question"
-            disabled={!draft.trim() || busy}
-          >
-            <Icon name="arrow" />
-          </button>
+          <div className="composer-toolbar">
+            <Icon name="at" size={21} />
+            <span className="muted small">Ask across your saved meetings</span>
+            <span className="spacer" />
+            <button
+              className="icon send"
+              type="submit"
+              aria-label="Send question"
+              disabled={!draft.trim() || busy}
+            >
+              <Icon name="send" size={23} />
+            </button>
+          </div>
         </form>
         <p className="muted small" role="status">
           {busy

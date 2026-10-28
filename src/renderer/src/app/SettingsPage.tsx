@@ -3,6 +3,7 @@ import type { AccountProvider } from '../../../shared/integrations.ts';
 import { MEETING_MODES, type Settings } from '../../../shared/settings.ts';
 import { MODE_INFO } from '../components/Bar.tsx';
 import { Icon } from '../components/Icon.tsx';
+import { Avatar } from '../components/Avatars.tsx';
 import type { SettingsProps } from './MainWindow.tsx';
 
 type StringKey = { [K in keyof Settings]: Settings[K] extends string ? K : never }[keyof Settings];
@@ -459,6 +460,7 @@ export function SettingsPage(
         {SECTIONS.map(([id, label]) => (
           <button
             key={id}
+            aria-label={label}
             className={anchor === id ? 'on' : ''}
             aria-current={anchor === id ? 'location' : undefined}
             onClick={() => onAnchor(id)}
@@ -469,6 +471,20 @@ export function SettingsPage(
       </nav>
       <div className="settings-scroll" ref={scroll}>
         <section className="settings-section" id="settings-profile" tabIndex={-1}>
+          <div className="profile-header">
+            <Avatar name={s.myName || 'You'} />
+            <div>
+              <strong>{s.myName || 'Your profile'}</strong>
+              <span className="muted">Your Bolo workspace</span>
+            </div>
+            <button
+              onClick={() =>
+                scroll.current?.querySelector<HTMLInputElement>('#settings-profile input')?.focus()
+              }
+            >
+              Edit
+            </button>
+          </div>
           <header>
             <h2>Profile</h2>
             <p className="muted">A few things that make Bolo yours.</p>

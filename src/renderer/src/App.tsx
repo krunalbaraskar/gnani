@@ -321,13 +321,16 @@ export function App() {
             className="ghost small"
             onClick={() => window.bolo.window({ kind: 'toggle-click-through' })}
           >
-            Click-through <kbd>Ctrl+Shift+M</kbd>
+            <Icon name="cursor" /> Click-through <kbd>Ctrl+Shift+M</kbd>
           </button>
           <button className="ghost small" onClick={() => window.bolo.window({ kind: 'hide' })}>
-            Hide <kbd>Ctrl+Shift+H</kbd>
+            <Icon name="hide" /> Hide <kbd>Ctrl+Shift+H</kbd>
           </button>
-          <button className="ghost small" onClick={() => window.bolo.window({ kind: 'quit' })}>
-            Quit Bolo
+          <button
+            className="ghost small danger"
+            onClick={() => window.bolo.window({ kind: 'quit' })}
+          >
+            <Icon name="close" /> Quit Bolo
           </button>
         </div>
       )}
@@ -399,7 +402,7 @@ export function App() {
         )}
       {state.mention && (
         <div className={`strip mention ${state.mention.asked ? 'asked' : ''}`} role="alert">
-          <Icon name="bell" />
+          <Icon name="at" />
           <span className="mention-text">
             <strong>
               {state.mention.asked ? 'Asked you' : 'Mentioned'}: {state.mention.terms.join(', ')}
@@ -496,6 +499,7 @@ export function App() {
                   className={state.panel === tab ? 'on' : ''}
                   onClick={() => dispatch({ type: 'panel', panel: tab })}
                 >
+                  {tab === 'live' && <Icon name="hash" size={15} />}
                   {label}
                 </button>
               ))}
