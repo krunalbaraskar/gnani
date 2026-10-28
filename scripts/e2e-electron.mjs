@@ -70,6 +70,7 @@ writeFileSync(
     mode: 'active',
     myName: 'Krunal',
     watchWords: 'Mehta Hardware',
+    onboarded: true, // The dedicated UI suite exercises the main window's setup flow.
     calendarFile,
   }),
 );
@@ -114,6 +115,11 @@ const check = (ok, msg) =>
   ok ? console.info('  ✓', msg) : (failures.push(msg), console.error('  ✗', msg));
 try {
   page = await app.firstWindow();
+  if (new URL(page.url()).hash) {
+    page =
+      app.windows().find((w) => !new URL(w.url()).hash) ??
+      (await app.waitForEvent('window', { predicate: (w) => !new URL(w.url()).hash }));
+  }
   const logs = [];
   page.on('console', (m) => logs.push(`${m.type()}: ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
@@ -309,7 +315,12 @@ try {
   }
   // ---- Meeting library ----
   const meetingsDir = join(appData, 'Bolo', 'meetings');
-  const libraryOpened = app.waitForEvent('window');
+  const existingLibrary = app
+    .windows()
+    .find((w) => /^#(?:app|library)/.test(new URL(w.url()).hash));
+  const libraryOpened = existingLibrary
+    ? Promise.resolve(existingLibrary)
+    : app.waitForEvent('window');
   await savedNotice.click();
   const lib = await libraryOpened;
   lib.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
@@ -387,6 +398,30 @@ try {
   await lib.locator('.ask-sources .chip').first().click();
   await lib.getByRole('tab', { name: 'Minutes' }).waitFor();
   check(true, 'asking your meetings answers with a link to the meeting');
+
+  // Changes in the main window also refresh the overlay's settings without refocusing it.
+  await lib
+    .getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click();
+  await lib.getByLabel('My name', { exact: true }).fill('Asha');
+  await lib.getByLabel('My name', { exact: true }).press('Enter');
+  await page.getByRole('tab', { name: 'Context' }).click();
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll('label'))
+        .find((l) => l.textContent.startsWith('My name'))
+        ?.querySelector('input')?.value === 'Asha',
+  );
+  await lib.getByLabel('My name', { exact: true }).fill('Krunal');
+  await lib.getByLabel('My name', { exact: true }).press('Enter');
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll('label'))
+        .find((l) => l.textContent.startsWith('My name'))
+        ?.querySelector('input')?.value === 'Krunal',
+  );
+  check(true, 'main-window settings are synchronized with the overlay');
 
   // A second meeting, started from the calendar: it takes the invite's title, people and
   // agenda, and Bolo answers from the first meeting's minutes.

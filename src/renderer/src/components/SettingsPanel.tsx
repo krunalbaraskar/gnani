@@ -63,7 +63,12 @@ export function SettingsPanel({
   }, []);
 
   return (
-    <div className="settings">
+    <div
+      className="settings"
+      role="tabpanel"
+      id="overlay-panel-settings"
+      aria-labelledby="overlay-tab-settings"
+    >
       <fieldset>
         <legend>Keys (from .env — never shown here)</legend>
         <p className={app.keys.stt ? 'ok' : 'error-text'}>

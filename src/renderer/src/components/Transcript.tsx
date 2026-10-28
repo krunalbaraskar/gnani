@@ -12,8 +12,10 @@ interface Props {
 /** One line of the conversation. "Them" lines can be clicked to (re)explain them. */
 export function Line({ segment: s, when }: { segment: TranscriptSegment; when?: string }) {
   const them = s.speaker === 'them';
+  const Tag = them ? 'button' : 'div';
   return (
-    <div
+    <Tag
+      type={them ? 'button' : undefined}
       className={`line line-${s.speaker} ${them ? 'clickable' : ''} ${s.mentions ? 'mentioned' : ''}`}
       onClick={them ? () => window.bolo.requestMeaning(s.id) : undefined}
       title={
@@ -28,7 +30,7 @@ export function Line({ segment: s, when }: { segment: TranscriptSegment; when?: 
         {s.meaning && <span className="meaning">{s.meaning}</span>}
       </span>
       {when && <span className="when">{when}</span>}
-    </div>
+    </Tag>
   );
 }
 
@@ -47,6 +49,9 @@ export function Transcript({ segments, partial, processing, startedAt }: Props) 
   return (
     <div
       className="transcript"
+      role="tabpanel"
+      id="overlay-panel-transcript"
+      aria-labelledby="overlay-tab-transcript"
       ref={ref}
       onScroll={(e) => {
         const el = e.currentTarget;

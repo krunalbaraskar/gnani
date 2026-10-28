@@ -1,17 +1,17 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
-import { Library } from './library/Library.tsx';
+import { MainWindow } from './app/MainWindow.tsx';
 import './styles.css';
 import './library/library.css';
+import './app/app.css';
 
-// One bundle, two windows: the overlay, and the meeting library at #library.
-const isLibrary = /^#(library|app)\b/.test(window.location.hash);
-if (isLibrary) {
-  document.documentElement.classList.add('library-window');
-  document.title = 'Bolo — Meetings';
+// Old library links resolve inside the main app; an empty hash remains the call bar.
+const isApp = /^#(library|app)\b/.test(window.location.hash);
+if (isApp) {
+  document.documentElement.classList.add('app-window');
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{isLibrary ? <Library /> : <App />}</StrictMode>,
+  <StrictMode>{isApp ? <MainWindow /> : <App />}</StrictMode>,
 );

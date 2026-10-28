@@ -29,7 +29,7 @@ export default tseslint.config(
   },
   {
     // Runs in Node but evaluates callbacks inside the page.
-    files: ['scripts/e2e-live.mjs', 'scripts/e2e-electron.mjs'],
+    files: ['scripts/e2e-live.mjs', 'scripts/e2e-electron.mjs', 'scripts/e2e-ui.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {

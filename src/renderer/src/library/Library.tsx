@@ -10,6 +10,8 @@ import { MAX_SPEAKER_NAME, speakerOf } from '../../../shared/speakers.ts';
 import { formatClock } from '../../../shared/transcript/format.ts';
 import { Icon } from '../components/Icon.tsx';
 import { MODE_INFO } from '../components/Bar.tsx';
+import { Avatars } from '../components/Avatars.tsx';
+import { moveTab } from '../components/Tabs.tsx';
 
 type Tab = 'minutes' | 'transcript' | 'notes';
 
@@ -62,11 +64,17 @@ interface AskState {
 
 let asks = 0;
 
-export function Library() {
+export function Library({
+  meetingId,
+  onSelect,
+}: {
+  meetingId?: string;
+  onSelect?: (id: string) => void;
+}) {
   const [list, setList] = useState<MeetingSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<string | null>(initialId);
+  const [selected, setSelected] = useState<string | null>(() => meetingId ?? initialId());
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
   const [progress, setProgress] = useState<Record<string, MinutesProgressView>>({});
   const [tab, setTab] = useState<Tab>('minutes');
@@ -79,12 +87,32 @@ export function Library() {
   queryRef.current = listQuery;
   selectedRef.current = selected;
 
+  useEffect(() => {
+    if (meetingId && meetingId !== selectedRef.current) {
+      setQuery('');
+      setAsk(null);
+      setSelected(meetingId);
+    }
+  }, [meetingId]);
+
   const refreshList = useCallback(async () => {
-    setList(await window.bolo.listMeetings(queryRef.current));
-    setLoaded(true);
+    const query = queryRef.current;
+    try {
+      const next = await window.bolo.listMeetings(query);
+      if (query !== queryRef.current) return;
+      setList(next);
+      setLoaded(true);
+    } catch {
+      setToast({ text: 'Could not load your meetings. Please try again.', error: true });
+    }
   }, []);
   const refreshDetail = useCallback(async (id: string | null) => {
-    setDetail(id ? await window.bolo.getMeeting(id) : null);
+    try {
+      const next = id ? await window.bolo.getMeeting(id) : null;
+      if (id === selectedRef.current) setDetail(next);
+    } catch {
+      setToast({ text: 'Could not open this meeting. Please try again.', error: true });
+    }
   }, []);
 
   useEffect(() => {
@@ -93,14 +121,18 @@ export function Library() {
   }, [listQuery, refreshList]);
 
   useEffect(() => {
+    setDetail(null);
     void refreshDetail(selected);
     setTab('minutes');
   }, [selected, refreshDetail]);
 
   // Open the newest meeting when nothing was asked for.
   useEffect(() => {
-    if (!selected && !listQuery && list[0]) setSelected(list[0].id);
-  }, [list, selected, listQuery]);
+    if (!selected && !listQuery && list[0]) {
+      setSelected(list[0].id);
+      onSelect?.(list[0].id);
+    }
+  }, [list, selected, listQuery, onSelect]);
 
   useEffect(
     () =>
@@ -113,6 +145,7 @@ export function Library() {
               setProgress(({ [e.summary.id]: _done, ...rest }) => rest);
             break;
           case 'meeting-deleted':
+            setList((current) => current.filter((m) => m.id !== e.id));
             void refreshList();
             if (e.id === selectedRef.current) setSelected(null);
             break;
@@ -122,9 +155,6 @@ export function Library() {
           case 'open-meeting':
             setQuery('');
             setSelected(e.id);
-            break;
-          case 'notice':
-            setToast({ text: e.message, error: e.level === 'error' });
             break;
           case 'ask-progress':
             setAsk((a) => (a?.askId === e.askId && !a.answer ? { ...a, text: e.text } : a));
@@ -145,14 +175,23 @@ export function Library() {
     if (!question) return;
     const askId = ++asks;
     setAsk({ askId, question, text: '' });
-    const r = await window.bolo.askMeetings(question, askId);
-    setAsk((a) =>
-      a?.askId !== askId ? a : 'error' in r ? { ...a, error: r.error } : { ...a, answer: r },
-    );
+    try {
+      const r = await window.bolo.askMeetings(question, askId);
+      setAsk((a) =>
+        a?.askId !== askId ? a : 'error' in r ? { ...a, error: r.error } : { ...a, answer: r },
+      );
+    } catch {
+      setAsk((a) =>
+        a?.askId === askId
+          ? { ...a, error: 'Could not reach your AI model. Please try again.' }
+          : a,
+      );
+    }
   };
   const open = (id: string) => {
     setAsk(null);
     setSelected(id);
+    onSelect?.(id);
   };
 
   const groups = useMemo(() => {
@@ -219,6 +258,7 @@ export function Library() {
                     })}{' '}
                     · {duration(m.durationMs)}
                     {m.minutes === 'writing' && <span className="badge busy">writing</span>}
+                    {m.minutes === 'ready' && <span className="badge ready">ready</span>}
                     {m.minutes === 'failed' && <span className="badge bad">no minutes</span>}
                     {m.actionItems > 0 && <span className="badge">{m.actionItems} to do</span>}
                   </span>
@@ -267,7 +307,7 @@ export function Library() {
   );
 }
 
-const ASK_LABEL: Record<MeetingAnswerView['verdict'], string> = {
+export const ASK_LABEL: Record<MeetingAnswerView['verdict'], string> = {
   files: 'From your meetings',
   call: 'From your meetings',
   recap: 'From your meetings',
@@ -364,6 +404,12 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
           {m.mode && <> · {MODE_INFO[m.mode]?.label ?? m.mode} mode</>}
           {m.pauses.length > 0 && <> · paused {m.pauses.length}×</>}
         </div>
+        {!!m.attendees.length && (
+          <div className="meeting-attendees">
+            <Avatars people={m.attendees} />
+            <span className="muted small">{m.attendees.length} people invited</span>
+          </div>
+        )}
         <button
           className="ghost small danger"
           onClick={() => void window.bolo.deleteMeeting(m.id)}
@@ -373,7 +419,12 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
         </button>
       </header>
 
-      <nav className="tabs lib-tabs" role="tablist">
+      <nav
+        className="tabs lib-tabs"
+        role="tablist"
+        aria-label="Meeting details"
+        onKeyDown={moveTab}
+      >
         {(
           [
             ['minutes', 'Minutes'],
@@ -385,6 +436,9 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
             key={t}
             role="tab"
             aria-selected={tab === t}
+            tabIndex={tab === t ? 0 : -1}
+            id={`meeting-tab-${t}`}
+            aria-controls="meeting-panel"
             className={tab === t ? 'on' : ''}
             onClick={() => onTab(t)}
           >
@@ -393,7 +447,13 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
         ))}
       </nav>
 
-      <div className="meeting-body">
+      <div
+        className="meeting-body"
+        role="tabpanel"
+        id="meeting-panel"
+        aria-labelledby={`meeting-tab-${tab}`}
+        tabIndex={0}
+      >
         {tab === 'minutes' && (
           <MinutesPane m={m} progress={progress} onChanged={onChanged} toast={toast} />
         )}
