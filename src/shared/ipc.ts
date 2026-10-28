@@ -34,6 +34,7 @@ export const IPC = {
   openLibrary: 'bolo:open-library',
   openApp: 'bolo:open-app',
   requestStart: 'bolo:request-start',
+  showOverlayPanel: 'bolo:show-overlay-panel',
   connectAccount: 'bolo:connect-account',
   disconnectAccount: 'bolo:disconnect-account',
   listActionItems: 'bolo:list-action-items',
@@ -105,6 +106,9 @@ export interface AppState {
   detected: DetectedMeeting | null;
 }
 
+/** Tabs of the overlay's panel. */
+export type OverlayPanel = 'live' | 'transcript' | 'context' | 'settings';
+
 /** Sections of the main window. */
 export type AppSection = 'home' | 'meetings' | 'ask' | 'settings';
 
@@ -164,7 +168,9 @@ export type BoloEvent =
   /** The main window should show this section (and meeting, for "meetings"). */
   | { type: 'navigate'; section: AppSection; meetingId?: string }
   /** Overlay only: start a call (audio is captured there), for a calendar event if given. */
-  | { type: 'start-request'; eventKey?: string };
+  | { type: 'start-request'; eventKey?: string }
+  /** Overlay only: open the panel at this tab (e.g. Settings → Audio from the main window). */
+  | { type: 'overlay-panel'; panel: OverlayPanel };
 
 export type { ActionItemView, ConnectResult };
 

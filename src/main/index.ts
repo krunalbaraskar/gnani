@@ -466,6 +466,12 @@ void app.whenReady().then(() => {
       eventKey: typeof eventKey === 'string' ? eventKey : undefined,
     } as BoloEvent);
   });
+  ipcMain.on(IPC.showOverlayPanel, (e, panel: unknown) => {
+    const tabs = ['live', 'transcript', 'context', 'settings'];
+    if (!trusted(e) || !overlay || overlay.isDestroyed() || !tabs.includes(panel as string)) return;
+    overlay.showInactive();
+    overlay.webContents.send(IPC.event, { type: 'overlay-panel', panel } as BoloEvent);
+  });
   ipcMain.on(IPC.openApp, (e, section: unknown) => {
     if (trusted(e))
       openApp(APP_SECTIONS.includes(section as AppSection) ? (section as AppSection) : 'home');

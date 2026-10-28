@@ -25,6 +25,7 @@ const api: BoloApi = {
   openLibrary: (id) => ipcRenderer.send(IPC.openLibrary, id),
   openApp: (section) => ipcRenderer.send(IPC.openApp, section),
   requestStart: (eventKey) => ipcRenderer.send(IPC.requestStart, eventKey),
+  showOverlayPanel: (panel) => ipcRenderer.send(IPC.showOverlayPanel, panel),
   connectAccount: (provider) => ipcRenderer.invoke(IPC.connectAccount, provider),
   disconnectAccount: (id) => ipcRenderer.invoke(IPC.disconnectAccount, id),
   listActionItems: () => ipcRenderer.invoke(IPC.listActionItems),

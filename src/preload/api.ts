@@ -7,6 +7,7 @@ import type {
   ExportResult,
   ActionItemView,
   AppSection,
+  OverlayPanel,
   ConnectResult,
   StartResult,
   StopResult,
@@ -58,6 +59,8 @@ export interface BoloApi {
    * start (for a calendar event, if given) and brings it into view.
    */
   requestStart(eventKey?: string): void;
+  /** Shows the overlay with its panel open at a tab, e.g. 'settings' for audio input. */
+  showOverlayPanel(panel: OverlayPanel): void;
   /** Opens (or focuses) the main window at a section. */
   openApp(section?: AppSection): void;
   /**

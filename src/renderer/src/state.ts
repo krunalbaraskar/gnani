@@ -254,6 +254,8 @@ function applyEvent(state: UiState, e: BoloEvent): UiState {
     case 'navigate':
     case 'start-request': // handled in App, which owns audio capture
       return state;
+    case 'overlay-panel':
+      return { ...state, panel: e.panel, open: true };
     case 'calendar':
       return state.app ? { ...state, app: { ...state.app, calendar: e.calendar } } : state;
     case 'memory-updated':
