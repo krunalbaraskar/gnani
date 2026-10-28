@@ -120,6 +120,7 @@ export function Transcript({
       tabIndex={0}
       {...scroll}
     >
+      {segments.length > 0 && <div className="date-separator">Today</div>}
       {segments.length === 0 && pending.length === 0 && (
         <p className="empty">The live transcript appears here.</p>
       )}

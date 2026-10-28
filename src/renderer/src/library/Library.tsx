@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { markdownToHtml } from '../../../shared/markdown.ts';
 import type {
   MeetingAnswerView,
@@ -10,7 +10,10 @@ import { MAX_SPEAKER_NAME, speakerOf } from '../../../shared/speakers.ts';
 import { formatClock } from '../../../shared/transcript/format.ts';
 import { Icon } from '../components/Icon.tsx';
 import { MODE_INFO } from '../components/Bar.tsx';
-import { Avatars } from '../components/Avatars.tsx';
+import { Avatar, Avatars } from '../components/Avatars.tsx';
+import { AnswerCard } from '../components/AnswerCard.tsx';
+import { messageTime } from '../components/Transcript.tsx';
+import { meetingSlug } from '../app/presentation.ts';
 import { moveTab } from '../components/Tabs.tsx';
 
 type Tab = 'minutes' | 'transcript' | 'notes';
@@ -67,9 +70,13 @@ let asks = 0;
 export function Library({
   meetingId,
   onSelect,
+  sidebarLinks,
+  running = false,
 }: {
   meetingId?: string;
   onSelect?: (id: string) => void;
+  sidebarLinks?: ReactNode;
+  running?: boolean;
 }) {
   const [list, setList] = useState<MeetingSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -80,6 +87,7 @@ export function Library({
   const [tab, setTab] = useState<Tab>('minutes');
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [ask, setAsk] = useState<AskState | null>(null);
+  const [browsing, setBrowsing] = useState(false);
   // While an answer to a question is shown, the list shows every meeting, not search hits.
   const listQuery = ask ? '' : query;
   const queryRef = useRef(listQuery);
@@ -189,6 +197,7 @@ export function Library({
     }
   };
   const open = (id: string) => {
+    setBrowsing(false);
     setAsk(null);
     setSelected(id);
     onSelect?.(id);
@@ -206,8 +215,28 @@ export function Library({
   }, [list, listQuery]);
 
   return (
-    <div className="library">
+    <div className={`library ${detail || ask ? 'has-detail' : ''} ${browsing ? 'browsing' : ''}`}>
+      <button
+        className="icon meeting-list-toggle"
+        aria-label={browsing ? 'Back to meeting' : 'Browse meetings'}
+        title={browsing ? 'Back to meeting' : 'Browse meetings'}
+        onClick={() => setBrowsing(!browsing)}
+      >
+        <Icon name={browsing ? 'close' : 'threads'} size={20} />
+      </button>
       <aside className="lib-side">
+        <div className="library-sidebar-top">{sidebarLinks}</div>
+        <div className="sidebar-section">
+          <span>Meetings</span>
+          <button
+            className="icon"
+            aria-label="Start another meeting"
+            disabled={running}
+            onClick={() => window.bolo.requestStart()}
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
         <form
           className="lib-search"
           onSubmit={(e) => {
@@ -218,7 +247,7 @@ export function Library({
           <Icon name="search" size={14} />
           <input
             type="search"
-            placeholder="Search, or ask your meetings + Enter"
+            placeholder="Jump to a meeting…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search meetings"
@@ -250,7 +279,13 @@ export function Library({
                   onClick={() => open(m.id)}
                   aria-current={!ask && m.id === selected}
                 >
-                  <span className="lib-item-title">{m.title}</span>
+                  <span
+                    className={`lib-item-title ${m.minutes === 'writing' ? 'unread' : ''}`}
+                    title={m.title}
+                  >
+                    <Icon name="hash" />
+                    {meetingSlug(m.title)}
+                  </span>
                   <span className="lib-item-meta">
                     {new Date(m.startedAt).toLocaleTimeString('en-IN', {
                       hour: '2-digit',
@@ -378,7 +413,10 @@ interface ViewProps {
 }
 
 function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
+  const memberCount =
+    m.attendees.length || new Set(m.segments.map((s) => speakerOf(s, 'Me', m.speakers))).size;
   const [title, setTitle] = useState(m.title);
+  const details = useRef<HTMLDialogElement>(null);
   useEffect(() => setTitle(m.title), [m.title]);
   const saveTitle = async () => {
     const t = title.trim();
@@ -390,34 +428,87 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
   return (
     <article className="meeting">
       <header className="meeting-head">
-        <input
-          className="meeting-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => void saveTitle()}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          aria-label="Meeting title"
-          maxLength={200}
-        />
-        <div className="meeting-meta muted">
-          {when(m.startedAt)} · {duration(m.durationMs)} · {m.lines} lines
-          {m.mode && <> · {MODE_INFO[m.mode]?.label ?? m.mode} mode</>}
-          {m.pauses.length > 0 && <> · paused {m.pauses.length}×</>}
+        <div className="channel-heading">
+          <Icon name="hash" size={21} />
+          <h2>{meetingSlug(m.title)}</h2>
         </div>
-        {!!m.attendees.length && (
-          <div className="meeting-attendees">
-            <Avatars people={m.attendees} />
-            <span className="muted small">{m.attendees.length} people invited</span>
-          </div>
-        )}
         <button
-          className="ghost small danger"
-          onClick={() => void window.bolo.deleteMeeting(m.id)}
-          title="Delete this meeting from this computer"
+          className="icon meeting-info"
+          aria-label="Meeting information"
+          title="Meeting information"
+          onClick={() => details.current?.showModal()}
         >
-          <Icon name="trash" size={14} /> Delete
+          <Icon name="info" size={21} />
         </button>
+        <div className="meeting-meta muted">
+          {memberCount} members · {when(m.startedAt)} · {duration(m.durationMs)}
+        </div>
       </header>
+      <dialog
+        ref={details}
+        className="details-sheet"
+        aria-labelledby="meeting-information-title"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) details.current?.close();
+        }}
+      >
+        <header className="sheet-header">
+          <h2 id="meeting-information-title">Meeting details</h2>
+          <button
+            className="icon"
+            aria-label="Close meeting information"
+            onClick={() => details.current?.close()}
+          >
+            <Icon name="close" />
+          </button>
+        </header>
+        <div className="sheet-body">
+          <label>
+            Meeting title
+            <input
+              className="meeting-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => void saveTitle()}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              aria-label="Meeting title"
+              maxLength={200}
+            />
+          </label>
+          <div className="meeting-meta muted">
+            {when(m.startedAt)} · {duration(m.durationMs)} · {m.lines} lines
+            {m.mode && <> · {MODE_INFO[m.mode]?.label ?? m.mode} mode</>}
+            {m.pauses.length > 0 && <> · paused {m.pauses.length}×</>}
+          </div>
+          {!!m.attendees.length && (
+            <div className="meeting-attendees">
+              <Avatars people={m.attendees} />
+              <span className="muted small">{m.attendees.join(', ')}</span>
+            </div>
+          )}
+          <h3>Agenda</h3>
+          <p>{m.agenda || 'No agenda added.'}</p>
+          <h3>Pauses</h3>
+          {m.pauses.length ? (
+            <ul>
+              {m.pauses.map((p) => (
+                <li key={p.from}>
+                  {messageTime(p.from)} · {duration(p.to - p.from)} off the record
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">No pauses in this meeting.</p>
+          )}
+          <button
+            className="ghost small danger"
+            onClick={() => void window.bolo.deleteMeeting(m.id)}
+            title="Delete this meeting from this computer"
+          >
+            <Icon name="trash" size={14} /> Delete
+          </button>
+        </div>
+      </dialog>
 
       <nav
         className="tabs lib-tabs"
@@ -521,6 +612,21 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
 
   return (
     <div className="minutes">
+      <div className="pinned-label">
+        <Icon name="pin" size={13} />
+        Pinned in this meeting
+      </div>
+      <div className="pinned-author">
+        <Avatar name="Bolo" />
+        <div>
+          <div className="message-header">
+            <strong>Bolo</strong>
+            <span className="app-tag">APP</span>
+            <time className="when">{messageTime(minutes.generatedAt)}</time>
+          </div>
+          <span className="muted small">Meeting minutes</span>
+        </div>
+      </div>
       <div className="minutes-bar">
         {editing ? (
           <>
@@ -747,42 +853,46 @@ function TranscriptPane({
           Speech-to-text hears you and “them”. Name them here, or line by line.
         </span>
       </div>
-      {items.map((it, i) =>
-        it.kind === 'line' ? (
+      <div className="date-separator">{dayLabel(m.startedAt)}</div>
+      {items.map((it, i) => {
+        const name = it.kind === 'line' ? speakerOf(it.seg, 'Me', m.speakers) : '';
+        const previous = items[i - 1];
+        const grouped =
+          it.kind === 'line' &&
+          previous?.kind === 'line' &&
+          previous.seg.speaker === it.seg.speaker &&
+          speakerOf(previous.seg, 'Me', m.speakers) === name &&
+          it.at - previous.at < 120000;
+        return it.kind === 'line' ? (
           <div
             key={it.seg.id}
-            className={`tline ${it.seg.speaker} ${it.seg.mentions ? 'mentioned' : ''}`}
+            className={`tline ${it.seg.speaker} ${grouped ? 'grouped' : ''} ${it.seg.mentions?.length ? 'mentioned' : ''}`}
           >
-            <span className="t">{formatClock(it.at - m.startedAt)}</span>
-            {it.seg.speaker === 'me' ? (
-              <span className="who">Me</span>
-            ) : (
-              <SpeakerPicker m={m} segId={it.seg.id} names={names} onChanged={onChanged} />
-            )}
-            <span className="text">
-              {it.seg.text}
-              {it.seg.meaning && <em className="meaning">{it.seg.meaning}</em>}
-            </span>
+            {!grouped && <Avatar name={name} />}
+            <div className="message-body">
+              <header className="message-header">
+                {it.seg.speaker === 'me' ? (
+                  <span className="who">Me</span>
+                ) : (
+                  <SpeakerPicker m={m} segId={it.seg.id} names={names} onChanged={onChanged} />
+                )}
+                <time className="when">{messageTime(it.at)}</time>
+              </header>
+              <span className="text">
+                {it.seg.text}
+                {it.seg.meaning && <em className="meaning">{it.seg.meaning}</em>}
+              </span>
+            </div>
           </div>
         ) : it.kind === 'answer' ? (
-          <div key={it.s.id} className="tline bolo">
-            <span className="t">{formatClock(it.at - m.startedAt)}</span>
-            <span className="who">Bolo</span>
-            <span className="text">
-              {it.s.asked && <span className="muted">You asked: {it.s.asked} — </span>}
-              {it.s.text.replace(/```\w*\n?/g, '')}
-              {!!it.s.sources?.length && (
-                <span className="muted"> (from {it.s.sources.join(', ')})</span>
-              )}
-            </span>
-          </div>
+          <AnswerCard key={it.s.id} suggestion={it.s} running={false} onRequest={() => {}} />
         ) : (
           <div key={`p${i}`} className="tline pause muted">
             <span className="t">{formatClock(it.at - m.startedAt)}</span>
             <span className="text">Paused for {duration(it.to - it.at)} (off the record)</span>
           </div>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -826,21 +936,11 @@ function NotesPane({ m, onChanged }: { m: MeetingDetail; onChanged: (m: MeetingD
       {answers.length === 0 ? (
         <p className="muted">No answers in this meeting.</p>
       ) : (
-        <ul className="answers">
+        <div className="answers">
           {answers.map((s) => (
-            <li key={s.id}>
-              <span className="muted small">
-                {formatClock(s.startedAt - m.startedAt)} ·{' '}
-                {s.asked
-                  ? `You asked: ${s.asked}`
-                  : s.question
-                    ? `They asked: ${s.question}`
-                    : 'Suggested reply'}
-              </span>
-              <span>{s.text}</span>
-            </li>
+            <AnswerCard key={s.id} suggestion={s} running={false} onRequest={() => {}} />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

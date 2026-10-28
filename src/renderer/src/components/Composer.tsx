@@ -45,6 +45,7 @@ export function Composer({
         disabled={!canAsk}
       />
       <div className="composer-toolbar">
+        <Icon name="at" size={21} />
         <button
           type="button"
           className={`icon ${withScreen ? 'on' : ''}`}

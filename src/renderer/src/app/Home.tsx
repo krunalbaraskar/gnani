@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { meetingNow, startsInLabel, type CalendarEventView } from '../../../shared/calendar.ts';
 import type { ActionItemView, AppState } from '../../../shared/ipc.ts';
 import type { MeetingSummary } from '../../../shared/meeting.ts';
-import { Avatars } from '../components/Avatars.tsx';
+import { Avatar, Avatars } from '../components/Avatars.tsx';
 import { Icon } from '../components/Icon.tsx';
 import type { Notify } from './MainWindow.tsx';
 
@@ -40,6 +40,7 @@ export function Home({
   const [now, setNow] = useState(Date.now);
   const [actions, setActions] = useState<ActionItemView[]>([]);
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
+  const [attendees, setAttendees] = useState<Record<string, string[]>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [all, setAll] = useState(false);
@@ -64,6 +65,13 @@ export function Home({
       setMeetings(recent.sort((a, b) => b.startedAt - a.startedAt).slice(0, 6));
       setLoaded(true);
       setError(false);
+      const people = await Promise.all(
+        recent.slice(0, 6).map(async (m) => {
+          const detail = await window.bolo.getMeeting(m.id).catch(() => null);
+          return [m.id, detail?.attendees ?? []] as const;
+        }),
+      );
+      if (request === revision.current) setAttendees(Object.fromEntries(people));
     } catch {
       if (request === revision.current) setError(true);
     }
@@ -151,7 +159,9 @@ export function Home({
         </div>
       )}
       <div className="dashboard-grid">
-        <section className="dashboard-card now-card">
+        <section
+          className={`dashboard-card now-card ${app.detected && !next ? 'detected-offer' : ''}`}
+        >
           <div className="card-heading">
             <h3>
               <Icon name="calendar" />{' '}
@@ -165,7 +175,10 @@ export function Home({
                 {next.start >= tomorrow.getTime() ? 'Tomorrow · ' : ''}
                 {startsInLabel(next.start - now)}
               </p>
-              <h4 className="event-title">{next.title}</h4>
+              <h4 className="event-title">
+                <span className="live-dot" />
+                {next.title}
+              </h4>
               <p className="muted">
                 {timeLabel(next.start)} – {timeLabel(next.end)}
               </p>
@@ -212,14 +225,18 @@ export function Home({
               </span>
               <h4>A little breathing room</h4>
               <p className="muted">No meeting coming up. Bolo is here when you need it.</p>
-              <button disabled={app.sessionRunning} onClick={() => window.bolo.requestStart()}>
+              <button
+                aria-label="Start an unscheduled meeting"
+                disabled={app.sessionRunning}
+                onClick={() => window.bolo.requestStart()}
+              >
                 Start a meeting
               </button>
             </div>
           )}
           {app.sessionRunning && (
             <p className="muted small">
-              A meeting is already running. Use the controls in the sidebar.
+              A meeting is already running. Use the controls in the header.
             </p>
           )}
         </section>
@@ -258,6 +275,7 @@ export function Home({
                     {e.start >= tomorrow.getTime() && <span>Tomorrow</span>}
                     {e.allDay ? 'All day' : timeLabel(e.start)}
                   </time>
+                  <Avatars people={e.attendees} />
                   <div>
                     <strong>{e.title}</strong>
                     <span className="muted small">
@@ -290,7 +308,7 @@ export function Home({
             </p>
           )}
         </section>
-        <section className="dashboard-card">
+        <section className="dashboard-card" id="home-todos">
           <div className="card-heading">
             <h3>
               To do <span className="count">{actions.filter((a) => !a.done).length}</span>
@@ -358,23 +376,32 @@ export function Home({
             <div className="recent-meetings">
               {meetings.map((m) => (
                 <button className="recent-meeting" key={m.id} onClick={() => onMeeting(m.id)}>
-                  <span className="recent-top">
-                    <strong>{m.title}</strong>
-                    <span className={`minutes-badge minutes-${m.minutes}`}>
-                      {m.minutes === 'writing'
-                        ? 'Writing…'
-                        : m.minutes === 'ready'
-                          ? 'Ready'
-                          : m.minutes === 'failed'
-                            ? 'Failed'
-                            : 'No minutes'}
+                  <span className="recent-avatar">
+                    {attendees[m.id]?.length ? (
+                      <Avatars people={attendees[m.id] ?? []} />
+                    ) : (
+                      <Avatar name={m.title} />
+                    )}
+                  </span>
+                  <span className="recent-content">
+                    <span className="recent-top">
+                      <strong>{m.title}</strong>
+                      <span className={`minutes-badge minutes-${m.minutes}`}>
+                        {m.minutes === 'writing'
+                          ? 'Writing…'
+                          : m.minutes === 'ready'
+                            ? 'Ready'
+                            : m.minutes === 'failed'
+                              ? 'Failed'
+                              : 'No minutes'}
+                      </span>
                     </span>
+                    <span className="muted small">
+                      {dateLabel(m.startedAt)} · {minutesLabel(m.durationMs)} · {m.actionItems}{' '}
+                      action {m.actionItems === 1 ? 'item' : 'items'}
+                    </span>
+                    {m.snippet && <span className="meeting-snippet muted">Them: {m.snippet}</span>}
                   </span>
-                  <span className="muted small">
-                    {dateLabel(m.startedAt)} · {minutesLabel(m.durationMs)} · {m.actionItems} action{' '}
-                    {m.actionItems === 1 ? 'item' : 'items'}
-                  </span>
-                  {m.snippet && <span className="meeting-snippet muted">{m.snippet}</span>}
                 </button>
               ))}
             </div>
@@ -406,7 +433,7 @@ export function Home({
               disabled={!question.trim()}
               aria-label="Send question"
             >
-              <Icon name="arrow" />
+              <Icon name="send" />
             </button>
           </form>
         </section>
