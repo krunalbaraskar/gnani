@@ -61,6 +61,7 @@ in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 - [Try it free, without a Gnani key](#try-it-free-without-a-gnani-key)
 - [Environment variables](#environment-variables)
 - [Using Bolo](#using-bolo)
+- [Connect your calendar](#connect-your-calendar)
 - [How answers are kept honest](#how-answers-are-kept-honest)
 - [Architecture](#architecture)
 - [Gnani integration and what to verify](#gnani-integration-and-what-to-verify)
@@ -322,6 +323,55 @@ sent to that model, and kept nowhere.
 **Also:** reply language (same as the call, Hinglish in Roman script, or English); echo
 removal when you are not on headphones; a silence gate to save credits; and an export of
 the transcript, meanings, answers and their sources as Markdown and JSON when a call ends.
+
+## Connect your calendar
+
+Bolo reads your meetings three ways. Use any one; they can be combined.
+
+| Way | Setup | What you get |
+| --- | --- | --- |
+| **Sign in with Google** | A Google Cloud OAuth client (below), once | Live calendar, people, Meet links, agenda |
+| **Sign in with Outlook / Microsoft 365** | An Azure app registration (below), once | Live calendar, people, Teams links, agenda |
+| **iCal link or .ics file** | Nothing: paste the calendar's private iCal address | Read-only copy, refreshed every 10 minutes |
+
+Sign-in opens your browser; Bolo never sees your password. It asks for **read-only**
+calendar access, keeps the refresh token encrypted on this computer (Windows DPAPI), and
+**Disconnect** removes it (and revokes Google's grant).
+
+### Google (about 5 minutes)
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → create a project.
+2. **APIs & Services → Library** → enable **Google Calendar API**.
+3. **OAuth consent screen** → External → app name "Bolo", your email → add scope
+   `.../auth/calendar.events.readonly` → add yourself (and demo users) as **Test users**.
+4. **Credentials → Create credentials → OAuth client ID → Desktop app**.
+5. Put the client ID and secret in `.env`: `GOOGLE_CLIENT_ID=…` and
+   `GOOGLE_CLIENT_SECRET=…` (a Desktop client's secret is not confidential; PKCE
+   protects the sign-in). Restart Bolo.
+
+While the app is in "Testing", only the test users you added can sign in, and Google asks
+them to sign in again every 7 days. That is fine for a demo; publishing removes both.
+
+### Outlook / Microsoft 365 (about 5 minutes)
+
+1. [Azure portal](https://portal.azure.com/) → **App registrations → New registration**:
+   name "Bolo", supported accounts "Any organizational directory and personal Microsoft
+   accounts".
+2. **Authentication → Add a platform → Mobile and desktop applications** → custom redirect
+   URI `http://localhost` → Save. Set **Allow public client flows** to Yes.
+3. **API permissions → Add → Microsoft Graph → Delegated** → `Calendars.Read`,
+   `User.Read`, `offline_access`.
+4. Copy the **Application (client) ID** into `.env` as `MICROSOFT_CLIENT_ID=…`. Restart.
+
+Work accounts may need an admin to approve the app the first time.
+
+### Calls in other apps
+
+With **Settings → Notice calls in Zoom, Teams, Meet and others** on (the default), Bolo
+offers to start when another app starts using your microphone, which is how Windows
+itself knows to show the mic icon. It reads only which app is using the mic; no audio,
+no window titles. When that app lets go of the mic while Bolo is still listening, Bolo
+reminds you to stop and save.
 
 ## How answers are kept honest
 
