@@ -52,29 +52,29 @@ interface Props {
   state: UiState;
   startedAt: number | null;
   share: ShareProtection;
-  visionReady: boolean;
   mode: MeetingMode;
   onMode: (mode: MeetingMode) => void;
   onStart: () => void;
   onStop: () => void;
   onToggleOpen: () => void;
   onToggleMenu: () => void;
+  onAsk: () => void;
+  menuOpen: boolean;
 }
 
 export function Bar({
   state,
   startedAt,
   share,
-  visionReady,
   mode,
   onMode,
   onStart,
   onStop,
   onToggleOpen,
   onToggleMenu,
+  onAsk,
+  menuOpen,
 }: Props) {
-  const [question, setQuestion] = useState('');
-  const [withScreen, setWithScreen] = useState(false);
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -83,18 +83,11 @@ export function Bar({
     return () => clearInterval(t);
   }, [state.running]);
 
-  const submit = () => {
-    const text = question.trim();
-    if (!text || !state.running) return;
-    window.bolo.ask(text, withScreen);
-    setQuestion('');
-    setWithScreen(false); // the screen is attached to one question at a time
-  };
-
-  const canAsk = state.running && !state.clickThrough;
   return (
     <header className="bar">
-      <span className="brand">Bolo</span>
+      <span className="brand">
+        <Icon name="sparkle" size={17} /> Bolo
+      </span>
       {state.running ? (
         <button className="bar-main stop" onClick={onStop} title="Stop the call and save">
           <Icon name="stop" size={12} />
@@ -145,50 +138,12 @@ export function Bar({
         {MODE_INFO[mode].label}
       </button>
 
-      <form
-        className={`ask ${withScreen ? 'with-screen' : ''}`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <input
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          disabled={!canAsk}
-          maxLength={500}
-          placeholder={
-            state.clickThrough
-              ? 'Click-through on · Ctrl+Shift+M to use Bolo'
-              : state.running
-                ? withScreen
-                  ? 'Ask about your screen…'
-                  : 'Ask about this call or your files…'
-                : 'Start a call to ask'
-          }
-          aria-label="Ask Bolo"
-        />
-        <button
-          type="button"
-          className={`icon ${withScreen ? 'on' : ''}`}
-          disabled={!canAsk || !visionReady}
-          onClick={() => setWithScreen((v) => !v)}
-          aria-pressed={withScreen}
-          title={
-            visionReady
-              ? 'Attach my screen to this question (Ctrl+Alt+Space answers from the screen directly)'
-              : 'Set a vision model in Settings to use the screen'
-          }
-        >
-          <Icon name="screen" />
+      <span className="spacer" />
+      {!state.open && (
+        <button className="ghost small bar-ask" onClick={onAsk} disabled={state.clickThrough}>
+          <Icon name="send" size={14} /> Ask
         </button>
-        {question.trim() && (
-          <button type="submit" className="icon" title="Ask (Enter)" disabled={!canAsk}>
-            <Icon name="send" />
-          </button>
-        )}
-      </form>
+      )}
 
       <span
         className={`shield shield-${share}`}
@@ -206,7 +161,15 @@ export function Bar({
       >
         <Icon name={state.open ? 'chevronUp' : 'chevronDown'} />
       </button>
-      <button className="icon" onClick={onToggleMenu} title="More">
+      <button
+        id="overlay-more"
+        className="icon"
+        onClick={onToggleMenu}
+        title="More"
+        aria-haspopup="dialog"
+        aria-expanded={menuOpen}
+        aria-controls="overlay-menu"
+      >
         <Icon name="more" />
       </button>
     </header>

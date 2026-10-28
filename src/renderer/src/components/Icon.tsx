@@ -1,5 +1,8 @@
 const PATHS = {
   home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
+  bell: 'M6 9a6 6 0 0112 0v5l2 3H4l2-3zM10 21h4',
+  history: 'M4 5v5h5M4 10a8 8 0 118 10M12 7v5l3 2',
+  info: 'M12 3a9 9 0 100 18 9 9 0 000-18M12 11v6M12 7h.01',
   settings: 'M9 3h6l1 4 4 1v8l-4 1-1 4H9l-1-4-4-1V8l4-1zM12 9a3 3 0 100 6 3 3 0 000-6',
   calendar: 'M4 5h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h3M14 14h2',
   check: 'M5 12l4 4L19 6',

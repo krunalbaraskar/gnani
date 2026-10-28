@@ -607,19 +607,11 @@ export function SettingsPage(
             </Toggle>
           )}
           <p className="muted small">Speech settings apply from the next session.</p>
-          <a
-            className="audio-help"
-            href="#settings-audio-help"
-            onClick={(e) => {
-              e.preventDefault();
-              document.getElementById('settings-audio-help')?.focus();
-            }}
-          >
-            Audio input is set in the call bar <Icon name="arrow" size={14} />
-          </a>
-          <p id="settings-audio-help" className="muted small" tabIndex={-1}>
-            In the floating call bar, choose Expand → Settings → Audio for microphone input or WAV
-            replay. Ctrl+Shift+H shows or hides the bar.
+          <button className="audio-help" onClick={() => window.bolo.showOverlayPanel('settings')}>
+            Open audio settings <Icon name="arrow" size={14} />
+          </button>
+          <p className="muted small">
+            Choose a microphone or replay WAV files in the overlay’s Audio section.
           </p>
         </section>
         <section className="settings-section" id="settings-privacy" tabIndex={-1}>

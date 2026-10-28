@@ -4,13 +4,7 @@ export function Avatars({ people }: { people: readonly string[] }) {
     <span className="people" aria-label={people.join(', ')}>
       {people.slice(0, 4).map((name, i) => (
         <span key={`${name}-${i}`} className={`avatar avatar-${i}`} title={name} aria-hidden>
-          {name
-            .split(/[\s@._-]+/)
-            .filter(Boolean)
-            .slice(0, 2)
-            .map((s) => s[0])
-            .join('')
-            .toLocaleUpperCase()}
+          {initials(name)}
         </span>
       ))}
       {people.length > 4 && (
@@ -18,6 +12,25 @@ export function Avatars({ people }: { people: readonly string[] }) {
           +{people.length - 4}
         </span>
       )}
+    </span>
+  );
+}
+function initials(name: string) {
+  return name
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0])
+    .join('')
+    .toLocaleUpperCase();
+}
+
+/** A stable colour for a speaker, including when their position in a list changes. */
+export function Avatar({ name }: { name: string }) {
+  const tone = Array.from(name).reduce((sum, char) => sum + char.codePointAt(0)!, 0) % 3;
+  return (
+    <span className={`avatar avatar-${tone}`} aria-hidden>
+      {initials(name)}
     </span>
   );
 }

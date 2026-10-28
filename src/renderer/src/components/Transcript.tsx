@@ -1,74 +1,143 @@
 import { useEffect, useRef } from 'react';
-import { formatClock } from '../../../shared/transcript/format.ts';
 import type { Speaker, TranscriptSegment } from '../../../shared/transcript/types.ts';
+import { Avatar } from './Avatars.tsx';
 
-interface Props {
-  segments: TranscriptSegment[];
-  partial: Record<Speaker, string>;
-  processing: Record<Speaker, boolean>;
-  startedAt: number | null;
+export function messageTime(at: number) {
+  return new Date(at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** One line of the conversation. "Them" lines can be clicked to (re)explain them. */
-export function Line({ segment: s, when }: { segment: TranscriptSegment; when?: string }) {
+export function groupsWith(previous: TranscriptSegment | undefined, current: TranscriptSegment) {
+  return !!previous && previous.speaker === current.speaker && current.at - previous.at < 120_000;
+}
+
+/** Every row keeps its speaker label, including when its visible header is grouped. */
+export function Line({
+  segment: s,
+  name,
+  grouped = false,
+}: {
+  segment: TranscriptSegment;
+  name?: string;
+  grouped?: boolean;
+}) {
   const them = s.speaker === 'them';
-  const Tag = them ? 'button' : 'div';
+  const speaker = name || (them ? 'Them' : 'Me');
   return (
-    <Tag
-      type={them ? 'button' : undefined}
-      className={`line line-${s.speaker} ${them ? 'clickable' : ''} ${s.mentions ? 'mentioned' : ''}`}
-      onClick={them ? () => window.bolo.requestMeaning(s.id) : undefined}
-      title={
-        them
-          ? `${s.mentions ? `Mentions ${s.mentions.join(', ')}. ` : ''}Click to explain this line`
-          : undefined
-      }
+    <article
+      className={`line line-${s.speaker} ${grouped ? 'grouped' : ''} ${s.mentions?.length ? 'mentioned' : ''}`}
     >
-      <span className="who">{them ? 'Them' : 'Me'}</span>
-      <span className="text" lang="und">
-        {s.text}
-        {s.meaning && <span className="meaning">{s.meaning}</span>}
-      </span>
-      {when && <span className="when">{when}</span>}
-    </Tag>
+      <span className="who sr-only">{them ? 'Them' : 'Me'}</span>
+      {!grouped && <Avatar name={speaker} />}
+      <div className="message-body">
+        {!grouped && (
+          <header className="message-header">
+            <strong>{speaker}</strong>
+            <time className="when" dateTime={new Date(s.at).toISOString()}>
+              {messageTime(s.at)}
+            </time>
+          </header>
+        )}
+        <div className="text" lang="und">
+          {s.text}
+          {s.meaning && <span className="meaning">↳ {s.meaning}</span>}
+        </div>
+      </div>
+      {them && (
+        <button
+          className="small line-action"
+          onClick={() => window.bolo.requestMeaning(s.id)}
+          aria-label={`Explain: ${s.text}`}
+          title="Explain this line"
+        >
+          Explain
+        </button>
+      )}
+    </article>
   );
 }
 
-export function Transcript({ segments, partial, processing, startedAt }: Props) {
+export function PendingLine({
+  speaker,
+  name,
+  text,
+}: {
+  speaker: Speaker;
+  name: string;
+  text: string;
+}) {
+  return (
+    <div className={`pending-message line-${speaker}`}>
+      <Avatar name={name} />
+      <div className="message-body">
+        <header className="message-header">
+          <strong>{name}</strong>
+          <span className="muted small">Speaking…</span>
+        </header>
+        <p className="pending">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Stay with new messages unless the user has scrolled up to read earlier ones. */
+export function useMessageScroll(changes: unknown) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
-
   useEffect(() => {
     const el = ref.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [segments, partial, processing]);
+  }, [changes]);
+  return {
+    ref,
+    onScroll: () => {
+      const el = ref.current;
+      if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    },
+  };
+}
 
-  const t0 = startedAt ?? segments[0]?.at ?? 0;
+export function Transcript({
+  segments,
+  partial,
+  processing,
+  myName,
+  themName,
+}: {
+  segments: TranscriptSegment[];
+  partial: Record<Speaker, string>;
+  processing: Record<Speaker, boolean>;
+  myName: string;
+  themName: string;
+}) {
+  const scroll = useMessageScroll([segments, partial, processing]);
   const pending = (['them', 'me'] as const).filter((s) => partial[s] || processing[s]);
-
   return (
     <div
       className="transcript"
       role="tabpanel"
       id="overlay-panel-transcript"
       aria-labelledby="overlay-tab-transcript"
-      ref={ref}
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      }}
+      tabIndex={0}
+      {...scroll}
     >
       {segments.length === 0 && pending.length === 0 && (
         <p className="empty">The live transcript appears here.</p>
       )}
-      {segments.map((s) => (
-        <Line key={s.id} segment={s} when={formatClock(s.at - t0)} />
+      {segments.map((s, i) => (
+        <Line
+          key={s.id}
+          segment={s}
+          name={s.speaker === 'me' ? myName : themName}
+          grouped={groupsWith(segments[i - 1], s)}
+        />
       ))}
       {pending.map((s) => (
-        <div key={`pending-${s}`} className={`line line-${s} pending`}>
-          <span className="who">{s === 'me' ? 'Me' : 'Them'}</span>
-          <span className="text">{partial[s] || '…'}</span>
-        </div>
+        <PendingLine
+          key={s}
+          speaker={s}
+          name={s === 'me' ? myName : themName}
+          text={partial[s] || '…'}
+        />
       ))}
     </div>
   );

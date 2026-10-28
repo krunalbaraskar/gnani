@@ -1,4 +1,4 @@
-/* The main app has its own palette. The call bar always keeps its dark glass. */
+/* The main window and overlay share a system-aware palette. */
 html.app-window {
   --bg: 247, 247, 245;
   --paper: #f7f7f5;

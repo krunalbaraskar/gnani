@@ -44,12 +44,15 @@ function CalendarSection({
     <fieldset className="calendar">
       <legend>Calendar</legend>
       {!s.calendarFile && (
-        <input
-          type="url"
-          placeholder="Private iCal link (Google: calendar settings → Secret address in iCal format)"
-          aria-label="Calendar link"
-          {...link}
-        />
+        <label>
+          Private iCal link
+          <input
+            type="url"
+            placeholder="Private iCal link (Google: calendar settings → Secret address in iCal format)"
+            aria-label="Calendar link"
+            {...link}
+          />
+        </label>
       )}
       <div className="row">
         {s.calendarFile ? (
@@ -130,83 +133,89 @@ export function ContextTab({
       id="overlay-panel-context"
       aria-labelledby="overlay-tab-context"
     >
-      <label className="inline">
-        My name
-        <input
-          type="text"
-          maxLength={80}
-          placeholder="Used in the minutes, and alerts when they say it"
-          {...name}
-        />
-      </label>
-      <label className="inline">
-        Alert me on
-        <input
-          type="text"
-          maxLength={300}
-          placeholder="Project or client names, other spellings of my name (comma-separated)"
-          {...watch}
-        />
-      </label>
-      <p className="muted small">
-        Speech-to-text may write names in another script (Hindi writes Krunal as क्रुणाल): add that
-        spelling too.
-      </p>
-
-      <div className="row">
-        <span className="path" title={context.dir}>
-          {context.dir || 'No context folder yet'}
-        </span>
-        <button className="ghost small" onClick={() => void window.bolo.chooseContextDir()}>
-          <Icon name="folder" size={13} /> Choose folder…
-        </button>
-        {context.dir && (
-          <button className="ghost small" onClick={() => void window.bolo.reloadContext()}>
-            Reload
-          </button>
-        )}
-      </div>
-
-      {context.error && <p className="warn">{context.error}</p>}
-      {!context.dir && (
-        <p className="muted">
-          Add a folder with your stock sheet, price list or project notes (.csv, .md, .txt, .json).
-          When they ask, Bolo answers from those files and shows which one.
-        </p>
-      )}
-
-      {(context.files.length > 0 || context.skipped.length > 0) && (
-        <ul className="files">
-          {context.files.map((f) => (
-            <li key={f.name}>
-              <span>{f.name}</span>
-              <span className="muted">{f.info}</span>
-            </li>
-          ))}
-          {context.skipped.map((f) => (
-            <li key={f.name} className="skipped">
-              <span>{f.name}</span>
-              <span>skipped: {f.reason}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={s.useMeetings}
-          onChange={(e) => onChange({ useMeetings: e.target.checked })}
-        />
-        Also answer from my past meetings&apos; minutes and notes
-        {s.useMeetings && <span className="muted small">({memoryMeetings} saved)</span>}
-      </label>
-      {(context.files.length > 0 || (s.useMeetings && memoryMeetings > 0)) && (
+      <fieldset>
+        <legend>About you</legend>
+        <label>
+          My name
+          <input
+            type="text"
+            maxLength={80}
+            placeholder="Used in the minutes, and alerts when they say it"
+            {...name}
+          />
+        </label>
+        <label>
+          Alert me on
+          <input
+            type="text"
+            maxLength={300}
+            placeholder="Project or client names, other spellings of my name (comma-separated)"
+            {...watch}
+          />
+        </label>
         <p className="muted small">
-          What matches a question is sent to your AI model to answer it. Nothing is sent anywhere
-          else.
+          Speech-to-text may write names in another script (Hindi writes Krunal as क्रुणाल): add
+          that spelling too.
         </p>
-      )}
+      </fieldset>
+
+      <fieldset>
+        <legend>Your files and meetings</legend>
+        <div className="row">
+          <span className="path" title={context.dir}>
+            {context.dir || 'No context folder yet'}
+          </span>
+          <button className="ghost small" onClick={() => void window.bolo.chooseContextDir()}>
+            <Icon name="folder" size={13} /> Choose folder…
+          </button>
+          {context.dir && (
+            <button className="ghost small" onClick={() => void window.bolo.reloadContext()}>
+              Reload
+            </button>
+          )}
+        </div>
+
+        {context.error && <p className="warn">{context.error}</p>}
+        {!context.dir && (
+          <p className="muted">
+            Add a folder with your stock sheet, price list or project notes (.csv, .md, .txt,
+            .json). When they ask, Bolo answers from those files and shows which one.
+          </p>
+        )}
+
+        {(context.files.length > 0 || context.skipped.length > 0) && (
+          <ul className="files">
+            {context.files.map((f) => (
+              <li key={f.name}>
+                <span>{f.name}</span>
+                <span className="muted">{f.info}</span>
+              </li>
+            ))}
+            {context.skipped.map((f) => (
+              <li key={f.name} className="skipped">
+                <span>{f.name}</span>
+                <span>skipped: {f.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={s.useMeetings}
+            onChange={(e) => onChange({ useMeetings: e.target.checked })}
+          />
+          Also answer from my past meetings&apos; minutes and notes
+          {s.useMeetings && <span className="muted small">({memoryMeetings} saved)</span>}
+        </label>
+        {(context.files.length > 0 || (s.useMeetings && memoryMeetings > 0)) && (
+          <p className="muted small">
+            What matches a question is sent to your AI model to answer it. Nothing is sent anywhere
+            else.
+          </p>
+        )}
+      </fieldset>
 
       <CalendarSection
         s={s}
@@ -216,14 +225,17 @@ export function ContextTab({
         onStartEvent={onStartEvent}
       />
 
-      <label>
-        About me and this call
-        <textarea
-          rows={2}
-          placeholder="e.g. I sell industrial paint to distributors. Be brief and polite."
-          {...note}
-        />
-      </label>
+      <fieldset>
+        <legend>This call</legend>
+        <label>
+          About me and this call
+          <textarea
+            rows={2}
+            placeholder="e.g. I sell industrial paint to distributors. Be brief and polite."
+            {...note}
+          />
+        </label>
+      </fieldset>
     </div>
   );
 }

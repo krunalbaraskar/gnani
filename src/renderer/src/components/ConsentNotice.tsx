@@ -4,7 +4,7 @@ export function ConsentNotice({ onAccept, sttName }: { onAccept: () => void; stt
     <div className="consent" role="dialog" aria-modal="true" aria-labelledby="consent-title">
       <h2 id="consent-title">Before you record a call</h2>
       <p>
-        Bolo listens to <strong>both sides</strong> of your conversation. It sends the audio to
+        Bolo listens to <strong>both sides</strong> of your conversation. It sends the audio to{' '}
         {sttName} for speech-to-text, and the transcript to the AI model you configure, to suggest
         replies.
       </p>

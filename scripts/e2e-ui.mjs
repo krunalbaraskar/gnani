@@ -140,7 +140,10 @@ contextBridge.exposeInMainWorld('bolo', {
   chooseCalendarFile: async clear => { state.settings.calendarFile = clear ? '' : 'calendar.ics'; return state.calendar; },
   refreshCalendar: async () => state.calendar,
   chooseExportDir: async () => { state.settings.exportDir = 'C:/Bolo/exports'; return state.settings.exportDir; },
-  openExportDir: () => {}, window: () => {}, openApp: section => calls.push(['openApp', section]), openLibrary: () => {}, requestMeaning: () => {},
+  openExportDir: () => {}, window: command => calls.push(['window', command]), openApp: section => calls.push(['openApp', section]), openLibrary: () => {}, requestMeaning: id => calls.push(['requestMeaning', id]),
+  showOverlayPanel: panel => calls.push(['showOverlayPanel', panel]),
+  ask: (text, screen) => calls.push(['ask', text, screen]),
+  catchUp: () => calls.push(['catchUp']), requestSuggestion: () => calls.push(['requestSuggestion']),
 });
 contextBridge.exposeInMainWorld('__uiTest', {
   emit, calls: () => calls,
@@ -277,6 +280,12 @@ try {
   await settingsNav.getByRole('button', { name: 'AI & speech', exact: true }).click();
   await page.getByLabel('Speech-to-text language', { exact: true }).selectOption('indic-auto');
   await page.getByText(/Experimental: accuracy/).waitFor();
+  await page.getByRole('button', { name: 'Open audio settings', exact: true }).click();
+  assert(
+    (await page.evaluate(() => window.__uiTest.calls())).some(
+      (call) => call[0] === 'showOverlayPanel' && call[1] === 'settings',
+    ),
+  );
   await shot('settings-820-light');
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await shot('settings-820-dark');
@@ -353,6 +362,189 @@ try {
       (c) => c[0] === 'openApp' && c[1] === 'home',
     ),
   );
+  // Exercise the overlay at its actual content width, in both system themes.
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].setContentSize(620, 640),
+  );
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await page.getByTitle('Not for this meeting').click();
+  await emit({ type: 'detected', meeting: null });
+  await emit({ type: 'session', running: true, startedAt: Date.now() });
+  await page.getByRole('tab', { name: 'Live', selected: true }).waitFor();
+  await shot('overlay-empty-light');
+  const at = Date.now() - 300000;
+  const segments = [
+    {
+      id: 'them:1',
+      speaker: 'them',
+      at,
+      text: 'Achha, blue wala 5 litre ka kitna stock hai?',
+      meaning: 'How much stock of the blue 5-litre is there?',
+    },
+    { id: 'them:2', speaker: 'them', at: at + 60000, text: 'Aur wholesale rate bhi bata dijiye.' },
+    {
+      id: 'them:3',
+      speaker: 'them',
+      at: at + 180000,
+      text: 'Priya, can you send the quotation?',
+      mentions: ['Priya'],
+    },
+    { id: 'me:1', speaker: 'me', at: at + 190000, text: 'Yes, I’ll send it on WhatsApp.' },
+    { id: 'them:4', speaker: 'them', at: at + 200000, text: 'Thank you. Thursday works for us.' },
+  ];
+  for (const segment of segments) await emit({ type: 'segment', segment });
+  const answer = {
+    id: 'answer-1',
+    trigger: 'typed',
+    asked: 'How much stock is available?',
+    startedAt: at + 185000,
+    finishedAt: at + 186000,
+    firstTokenMs: 12,
+    text: 'Blue 5 litre ke 142 units Pune godown mein hain. Wholesale rate ₹1,850 hai.',
+    verdict: 'files',
+    sources: ['inventory.csv', 'price-list.md'],
+  };
+  await emit({ type: 'suggestion-start', suggestion: answer });
+  const live = page.locator('.live-feed');
+  assert.equal(await live.locator('.line').count(), 4);
+  assert.equal(await live.locator('.line.grouped').count(), 1);
+  assert.deepEqual(await live.locator('.message-header strong').allTextContents(), [
+    'Them',
+    'Them',
+    'Bolo',
+    'Them',
+  ]);
+  await live.getByRole('button', { name: /Explain: Achha/ }).focus();
+  await page.keyboard.press('Enter');
+  assert(
+    (await page.evaluate(() => window.__uiTest.calls())).some(
+      (call) => call[0] === 'requestMeaning' && call[1] === 'them:1',
+    ),
+  );
+  await emit({
+    type: 'mention',
+    mention: { terms: ['Priya'], text: segments[2].text, asked: true },
+  });
+  await page.locator('.mention.asked').waitFor();
+  await shot('overlay-live-light');
+
+  const ask = page.getByLabel('Ask Bolo', { exact: true });
+  await ask.fill('Keep this draft');
+  await page.getByRole('tab', { name: 'Live', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('tab', { name: 'Transcript', selected: true }).waitFor();
+  assert.equal(await ask.inputValue(), 'Keep this draft');
+  assert.equal(await page.locator('.transcript .line').count(), 5);
+  assert.equal(await page.locator('.transcript .line.grouped').count(), 1);
+  assert.equal(await page.locator('.transcript .line-me strong').textContent(), 'Priya');
+  assert.equal(await page.locator('.transcript .line.mentioned').count(), 1);
+  await shot('overlay-transcript-light');
+  await page.getByTitle('Dismiss', { exact: true }).click();
+
+  for (const tab of ['Context', 'Settings']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    assert(await ask.isEnabled());
+    assert.equal(await ask.inputValue(), 'Keep this draft');
+    await shot('overlay-' + tab.toLowerCase() + '-light');
+  }
+  assert.equal(await page.locator('.settings legend').first().textContent(), 'Audio');
+  await emit({ type: 'overlay-panel', panel: 'context' });
+  await page.getByRole('tab', { name: 'Context', selected: true }).waitFor();
+  await emit({ type: 'overlay-panel', panel: 'settings' });
+  await page.getByRole('tab', { name: 'Settings', selected: true }).waitFor();
+
+  await page.getByTitle('Collapse', { exact: true }).click();
+  assert.equal(
+    await page.locator('.shell').evaluate((el) => el.getBoundingClientRect().height),
+    44,
+  );
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await shot('overlay-collapsed-light');
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await page.waitForFunction(
+    () => document.activeElement?.getAttribute('aria-label') === 'Ask Bolo',
+  );
+  assert.equal(await ask.inputValue(), 'Keep this draft');
+  await page.evaluate(() => window.bolo.updateSettings({ llmVisionModel: 'vision-test' }));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.getByRole('button', { name: 'Attach my screen', exact: true }).click();
+  await ask.fill('Read this screen');
+  await ask.press('Enter');
+  assert(
+    (await page.evaluate(() => window.__uiTest.calls())).some(
+      (call) => call[0] === 'ask' && call[1] === 'Read this screen' && call[2] === true,
+    ),
+  );
+  assert.equal(await ask.inputValue(), '');
+  assert.equal(
+    await page.getByRole('button', { name: 'Attach my screen' }).getAttribute('aria-pressed'),
+    'false',
+  );
+  await page.getByRole('button', { name: 'Catch me up', exact: true }).click();
+  assert(
+    (await page.evaluate(() => window.__uiTest.calls())).some((call) => call[0] === 'catchUp'),
+  );
+
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  assert.equal(
+    await page
+      .locator('.shell')
+      .evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()),
+    '#8b8cff',
+  );
+  await shot('overlay-live-dark');
+  await page.getByRole('tab', { name: 'Transcript', exact: true }).click();
+  await shot('overlay-transcript-dark');
+  await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await shot('overlay-settings-dark');
+  await page.getByTitle('More', { exact: true }).click();
+  await shot('overlay-menu-dark');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.overlay-menu').count(), 0);
+  await page.waitForFunction(() => document.activeElement?.id === 'overlay-more');
+
+  // Long streaming answers and several banners must leave the composer in view.
+  await emit({
+    type: 'suggestion-start',
+    suggestion: {
+      ...answer,
+      id: 'long',
+      finishedAt: undefined,
+      text: 'A long answer. '.repeat(300),
+    },
+  });
+  await emit({
+    type: 'mention',
+    mention: { terms: ['Priya'], text: 'Can you confirm?', asked: true },
+  });
+  await emit({ type: 'notice', level: 'info', message: 'Your meeting is being saved.' });
+  assert(await page.locator('.shell').evaluate((el) => el.getBoundingClientRect().height <= 640));
+  assert(
+    await page
+      .locator('.composer')
+      .evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight),
+  );
+  assert(await live.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 40));
+  await live.evaluate((el) => {
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event('scroll'));
+  });
+  await emit({ type: 'suggestion-token', id: 'long', text: 'Updated answer. '.repeat(350) });
+  assert.equal(await live.evaluate((el) => el.scrollTop), 0);
+  await emit({
+    type: 'suggestion-done',
+    suggestion: {
+      ...answer,
+      id: 'long',
+      verdict: 'screen',
+      usedScreen: true,
+      text: 'Screen content reviewed.\n\n' + 'A long line of code: '.repeat(40),
+    },
+  });
+  await shot('overlay-long-answer-dark');
+  await emit({ type: 'click-through', enabled: true });
+  assert(await ask.isDisabled());
+  await shot('overlay-click-through-dark');
   assert.deepEqual(errors, []);
   console.info(`UI interactions passed. Screenshots: ${shots}`);
 } catch (e) {
