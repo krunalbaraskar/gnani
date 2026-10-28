@@ -6,13 +6,14 @@ import { openAudioPort, postFrame } from './audio/audio-ports.ts';
 import { FileReplay } from './audio/file-replay.ts';
 import { LiveCapture } from './audio/live-capture.ts';
 import type { AudioSink, AudioSourceController } from './audio/types.ts';
-import { AnswerCard } from './components/AnswerCard.tsx';
+import { Composer } from './components/Composer.tsx';
+import { LiveFeed } from './components/LiveFeed.tsx';
 import { Bar } from './components/Bar.tsx';
 import { ConsentNotice } from './components/ConsentNotice.tsx';
 import { ContextTab } from './components/ContextTab.tsx';
 import { Icon } from './components/Icon.tsx';
 import { SettingsPanel, type ReplaySelection } from './components/SettingsPanel.tsx';
-import { Line, Transcript } from './components/Transcript.tsx';
+import { Transcript } from './components/Transcript.tsx';
 import { moveTab } from './components/Tabs.tsx';
 import { initialUiState, uiReducer, type Tab } from './state.ts';
 import { onSettingsChanged, settingsChanged } from './app/settings-sync.ts';
@@ -29,6 +30,41 @@ export function App() {
   const [files, setFiles] = useState<ReplaySelection>({ me: null, them: null });
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [menu, setMenu] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [withScreen, setWithScreen] = useState(false);
+  const [askFocus, setAskFocus] = useState(0);
+  const [themName, setThemName] = useState('Them');
+  const composerInput = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (askFocus) composerInput.current?.focus();
+  }, [askFocus]);
+
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector('button')?.focus();
+    const close = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target) &&
+        !document.getElementById('overlay-more')?.contains(event.target)
+      )
+        setMenu(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenu(false);
+        document.getElementById('overlay-more')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [menu]);
   const [dismissedCalls, setDismissedCalls] = useState<ReadonlySet<string>>(new Set());
   const shell = useRef<HTMLDivElement>(null);
   const source = useRef<AudioSourceController | null>(null);
@@ -155,6 +191,10 @@ export function App() {
         return;
       }
       setStartedAt(Date.now());
+      const invite = fresh.calendar.events.find((event) => event.key === eventKey);
+      setThemName(
+        invite?.attendees.filter((name) => name !== settings.myName).join(', ') || 'Them',
+      );
       try {
         for (const s of SPEAKERS) ports.current[s] = await openAudioPort(s);
         const sink: AudioSink = {
@@ -237,8 +277,7 @@ export function App() {
     );
   const s = app.settings;
   const needsConsent = !s.consentAcknowledged || s.consentVersion < CONSENT_VERSION;
-  const lastThem = state.segments.findLast((x) => x.speaker === 'them');
-  const pendingThem = state.partial.them || (state.processing.them ? '…' : '');
+  const canCompose = state.panel === 'live' || state.running;
 
   return (
     <div
@@ -250,17 +289,28 @@ export function App() {
         state={state}
         startedAt={startedAt}
         share={app.shareProtection}
-        visionReady={!!s.llmVisionModel}
         mode={s.mode}
         onMode={(mode) => void updateSettings({ mode })}
         onStart={() => void start()}
         onStop={() => void stop()}
         onToggleOpen={() => dispatch({ type: 'toggle-open' })}
         onToggleMenu={() => setMenu((m) => !m)}
+        menuOpen={menu}
+        onAsk={() => {
+          dispatch({ type: 'panel', panel: 'live' });
+          setAskFocus((n) => n + 1);
+        }}
       />
 
       {menu && (
-        <div className="strip menu">
+        <div
+          className="overlay-menu"
+          id="overlay-menu"
+          role="dialog"
+          aria-label="More options"
+          ref={menuRef}
+          onClick={() => setMenu(false)}
+        >
           <button className="ghost small" onClick={() => window.bolo.openApp('home')}>
             <Icon name="home" size={13} /> Open Bolo
           </button>
@@ -276,7 +326,6 @@ export function App() {
           <button className="ghost small" onClick={() => window.bolo.window({ kind: 'hide' })}>
             Hide <kbd>Ctrl+Shift+H</kbd>
           </button>
-          <span className="spacer" />
           <button className="ghost small" onClick={() => window.bolo.window({ kind: 'quit' })}>
             Quit Bolo
           </button>
@@ -284,10 +333,21 @@ export function App() {
       )}
 
       {state.clickThrough && (
-        <div className="strip warn">Click-through on — Ctrl+Shift+M to use Bolo</div>
+        <div className="strip click-through-banner" role="status">
+          <Icon name="info" />
+          <span className="mention-text">Click-through on — Ctrl+Shift+M to use Bolo</span>
+          <button
+            className="icon"
+            title="Turn off click-through"
+            onClick={() => window.bolo.window({ kind: 'toggle-click-through' })}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
       )}
       {offer && !state.running && !state.starting && !needsConsent && (
         <div className="strip calendar-offer" role="status">
+          <Icon name="calendar" />
           <span className="mention-text">
             <strong>{offer.event.title}</strong> · {startsInLabel(offer.startsInMs)}
             {offer.event.attendees.length > 0 &&
@@ -321,6 +381,7 @@ export function App() {
         !needsConsent &&
         !dismissedCalls.has(app.detected.key) && (
           <div className="strip detected-offer" role="status">
+            <Icon name="info" />
             <span className="mention-text">
               <strong>{app.detected.app} call detected</strong>
             </span>
@@ -338,6 +399,7 @@ export function App() {
         )}
       {state.mention && (
         <div className={`strip mention ${state.mention.asked ? 'asked' : ''}`} role="alert">
+          <Icon name="bell" />
           <span className="mention-text">
             <strong>
               {state.mention.asked ? 'Asked you' : 'Mentioned'}: {state.mention.terms.join(', ')}
@@ -368,12 +430,23 @@ export function App() {
         <div
           className={`strip notice-${state.notice.level}`}
           role={state.notice.level === 'error' ? 'alert' : 'status'}
-          onClick={() => {
-            if (state.notice?.meetingId) window.bolo.openLibrary(state.notice.meetingId);
-            dispatch({ type: 'dismiss-notice' });
-          }}
         >
-          {state.notice.message}
+          <Icon name="info" />
+          {state.notice.meetingId ? (
+            <button
+              className="notice-message"
+              onClick={() => {
+                window.bolo.openLibrary(state.notice!.meetingId);
+                dispatch({ type: 'dismiss-notice' });
+              }}
+            >
+              {state.notice.message}
+            </button>
+          ) : (
+            <span className="mention-text" title={state.notice.message}>
+              {state.notice.message}
+            </span>
+          )}
           {state.notice.meetingId && (
             <button
               className="ghost small"
@@ -430,7 +503,8 @@ export function App() {
               {app.context.files.length > 0 || app.memoryMeetings > 0 ? (
                 <span className="muted small">
                   {[
-                    app.context.files.length && `${app.context.files.length} files`,
+                    app.context.files.length &&
+                      `${app.context.files.length} file${app.context.files.length === 1 ? '' : 's'}`,
                     s.useMeetings &&
                       app.memoryMeetings &&
                       `${app.memoryMeetings} past meeting${app.memoryMeetings === 1 ? '' : 's'}`,
@@ -466,35 +540,7 @@ export function App() {
                     </button>
                   </p>
                 )}
-                <section className="said">
-                  <span className="label">They said</span>
-                  {lastThem ? (
-                    <Line segment={lastThem} />
-                  ) : (
-                    <p className="empty">
-                      {state.running
-                        ? 'Listening. Their words appear here.'
-                        : 'Press Start when your call begins.'}
-                    </p>
-                  )}
-                  {pendingThem && <p className="pending">{pendingThem}</p>}
-                </section>
-                <AnswerCard
-                  suggestion={state.suggestion}
-                  running={state.running}
-                  onRequest={() => window.bolo.requestSuggestion()}
-                />
-                {state.running && (
-                  <div className="row">
-                    <button
-                      className="ghost small"
-                      onClick={() => window.bolo.catchUp()}
-                      title="What was said in the last 10 minutes, and anything asked of you"
-                    >
-                      Catch me up <kbd>Ctrl+Shift+U</kbd>
-                    </button>
-                  </div>
-                )}
+                <LiveFeed state={state} themName={themName} />
                 {state.echoesRemoved > 0 && (
                   <p className="muted small">
                     {state.echoesRemoved} echoed line(s) removed from Me
@@ -508,7 +554,8 @@ export function App() {
                 segments={state.segments}
                 partial={state.partial}
                 processing={state.processing}
-                startedAt={startedAt}
+                myName={s.myName || 'Me'}
+                themName={themName}
               />
             )}
 
@@ -539,6 +586,25 @@ export function App() {
                       window.bolo.getState().then((a) => dispatch({ type: 'init', app: { ...a } })),
                     )
                 }
+              />
+            )}
+            {canCompose && (
+              <Composer
+                running={state.running}
+                clickThrough={state.clickThrough}
+                visionReady={!!s.llmVisionModel}
+                question={question}
+                withScreen={withScreen}
+                inputRef={composerInput}
+                onQuestion={setQuestion}
+                onScreen={() => setWithScreen((value) => !value)}
+                onSubmit={() => {
+                  const text = question.trim();
+                  if (!text || !state.running || state.clickThrough) return;
+                  window.bolo.ask(text, withScreen && !!s.llmVisionModel);
+                  setQuestion('');
+                  setWithScreen(false);
+                }}
               />
             )}
           </div>

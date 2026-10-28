@@ -190,6 +190,25 @@ try {
 
   // First run: consent, then the window shrinks back to what is open.
   await page.getByText('Before you record a call').waitFor();
+  check(
+    await page.getByRole('button', { name: /I understand/ }).evaluate((el) => {
+      const luminance = (colour) => {
+        const rgb = colour
+          .match(/[\d.]+/g)
+          .slice(0, 3)
+          .map(Number)
+          .map((n) => n / 255);
+        const linear = rgb.map((n) => (n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4));
+        return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+      };
+      const style = getComputedStyle(el);
+      const values = [luminance(style.color), luminance(style.backgroundColor)].sort(
+        (a, b) => a - b,
+      );
+      return (values[1] + 0.05) / (values[0] + 0.05) >= 4.5;
+    }),
+    'consent button text meets 4.5:1 contrast',
+  );
   await shot('1-consent');
   await page.getByRole('button', { name: /I understand/ }).click();
 
@@ -460,6 +479,17 @@ try {
         ?.querySelector('input')?.value === 'Krunal',
   );
   check(true, 'main-window settings are synchronized with the overlay');
+  await lib
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'AI & speech', exact: true })
+    .click();
+  await lib.getByRole('button', { name: 'Open audio settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Settings', selected: true }).waitFor();
+  check(
+    (await page.locator('.settings legend').first().textContent()) === 'Audio',
+    'main-window audio settings button opens the overlay at Audio',
+  );
+  await shot('15-audio-settings');
 
   // Sign in to Google (mock provider): the account appears and its meeting is listed.
   await lib.getByRole('button', { name: 'Connect Google Calendar' }).click();

@@ -70,24 +70,12 @@ export function SettingsPanel({
       aria-labelledby="overlay-tab-settings"
     >
       <fieldset>
-        <legend>Keys (from .env — never shown here)</legend>
-        <p className={app.keys.stt ? 'ok' : 'error-text'}>
-          {app.stt.keyVar}: {app.keys.stt ? 'found' : 'missing — add it to .env and restart'}
-        </p>
-        <p className="muted small">
-          Speech-to-text: {app.stt.name} at {app.stt.url}
-        </p>
-        <p className={app.keys.llm ? 'ok' : 'muted'}>
-          LLM_API_KEY: {app.keys.llm ? 'found' : 'not set (fine for a local Ollama/vLLM server)'}
-        </p>
-      </fieldset>
-
-      <fieldset>
         <legend>Audio</legend>
         <div className="radio-row">
           <label>
             <input
               type="radio"
+              name="audio-mode"
               checked={s.audioMode === 'live'}
               onChange={() => onChange({ audioMode: 'live' })}
             />
@@ -96,6 +84,7 @@ export function SettingsPanel({
           <label>
             <input
               type="radio"
+              name="audio-mode"
               checked={s.audioMode === 'file'}
               onChange={() => onChange({ audioMode: 'file' })}
             />
@@ -222,6 +211,19 @@ export function SettingsPanel({
       </fieldset>
 
       <fieldset>
+        <legend>Keys (from .env — never shown here)</legend>
+        <p className={app.keys.stt ? 'ok' : 'error-text'}>
+          {app.stt.keyVar}: {app.keys.stt ? 'found' : 'missing — add it to .env and restart'}
+        </p>
+        <p className="muted small">
+          Speech-to-text: {app.stt.name} at {app.stt.url}
+        </p>
+        <p className={app.keys.llm ? 'ok' : 'muted'}>
+          LLM_API_KEY: {app.keys.llm ? 'found' : 'not set (fine for a local Ollama/vLLM server)'}
+        </p>
+      </fieldset>
+
+      <fieldset>
         <legend>Speech-to-text (Gnani)</legend>
         <label>
           Conversation language
@@ -285,6 +287,7 @@ export function SettingsPanel({
             <label key={v}>
               <input
                 type="radio"
+                name="reply-language"
                 checked={s.outputLanguage === v}
                 onChange={() => onChange({ outputLanguage: v })}
               />
@@ -296,7 +299,12 @@ export function SettingsPanel({
         <div className="radio-col">
           {MEETING_MODES.map((m) => (
             <label key={m}>
-              <input type="radio" checked={s.mode === m} onChange={() => onChange({ mode: m })} />
+              <input
+                type="radio"
+                name="meeting-mode"
+                checked={s.mode === m}
+                onChange={() => onChange({ mode: m })}
+              />
               {MODE_INFO[m].hint}
             </label>
           ))}
