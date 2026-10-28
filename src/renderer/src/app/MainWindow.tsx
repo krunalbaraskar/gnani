@@ -51,7 +51,7 @@ export function MainWindow() {
     try {
       const next = await window.bolo.getState();
       setApp(next);
-      setStartedAt((at) => (next.sessionRunning ? (at ?? Date.now()) : null));
+      setStartedAt(next.sessionRunning ? (next.sessionStartedAt ?? Date.now()) : null);
       setLoadError('');
     } catch {
       setLoadError('Bolo could not load. Please try again.');
@@ -70,7 +70,7 @@ export function MainWindow() {
       if (e.type === 'meeting-deleted')
         setRoute((current) => (current.meetingId === e.id ? { section: 'meetings' } : current));
       if (e.type === 'notice') notify(e.message, e.level === 'error');
-      if (e.type === 'session') setStartedAt(e.running ? Date.now() : null);
+      if (e.type === 'session') setStartedAt(e.running ? (e.startedAt ?? Date.now()) : null);
       setApp((current) => {
         if (!current) return current;
         switch (e.type) {

@@ -253,6 +253,7 @@ void app.whenReady().then(() => {
       clickThrough,
       sessionRunning: controller.running,
       sessionPaused: controller.paused,
+      sessionStartedAt: controller.startedAt,
       demoAudioDir: demoDir,
       context: contextView(s.contextDir, context),
       memoryMeetings: new Set(meetings.memory.map((c) => c.file)).size,

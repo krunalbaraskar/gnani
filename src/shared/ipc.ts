@@ -91,6 +91,8 @@ export interface AppState {
   clickThrough: boolean;
   sessionRunning: boolean;
   sessionPaused: boolean;
+  /** When the running call started (epoch ms), for timers in any window; null when idle. */
+  sessionStartedAt: number | null;
   /** Where demo WAVs are looked for (see npm run demo-audio). */
   demoAudioDir: string;
   context: ContextView;
@@ -146,7 +148,7 @@ export type BoloEvent =
   | { type: 'suggestion-token'; id: string; text: string }
   | { type: 'suggestion-done'; suggestion: SuggestionView }
   | { type: 'click-through'; enabled: boolean }
-  | { type: 'session'; running: boolean }
+  | { type: 'session'; running: boolean; startedAt?: number }
   | { type: 'paused'; paused: boolean }
   | { type: 'notice'; level: 'info' | 'error'; message: string }
   // Library window only.

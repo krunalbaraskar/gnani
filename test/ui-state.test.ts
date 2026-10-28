@@ -19,6 +19,7 @@ const app: AppState = {
   clickThrough: false,
   sessionRunning: false,
   sessionPaused: false,
+  sessionStartedAt: null,
   memoryMeetings: 0,
   calendar: { configured: false, events: [] },
   integrations: { accounts: [], available: { google: false, microsoft: false } },

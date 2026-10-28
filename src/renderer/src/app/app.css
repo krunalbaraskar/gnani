@@ -117,7 +117,7 @@ html.app-window,
   outline-offset: 3px;
 }
 .app-window
-  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea) {
+  :is(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea) {
   background: var(--card);
   border: 1px solid var(--line);
   color: var(--text);

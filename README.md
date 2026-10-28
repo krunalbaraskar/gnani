@@ -76,22 +76,22 @@ in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 
 Checked on Windows 11 (build 26100) on 2026-10-09.
 
-| Area                                                              | State                                                                                                                                          |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Audio pipeline, transcript, echo removal, question detection      | Done, unit-tested                                                                                                                              |
-| Context files: loading, chunking, selection                       | Done, unit-tested                                                                                                                              |
-| Answers: source parsing, number check, labels, trigger precedence | Done, unit-tested                                                                                                                              |
-| Meaning line for mixed-language speech                            | Done, unit-tested                                                                                                                              |
-| Modes (Silent / Assist / Active) and pause                        | Done, unit-tested                                                                                                                              |
-| Past meetings in answers, ask your meetings, catch-up, alerts     | Done, unit-tested and end to end with the mock model (2026-10-26)                                                                              |
-| Calendar (iCal link or file), speaker names, guessing speakers    | Done, unit-tested and end to end with an .ics file and the mock model (2026-10-28). Not yet tried with a real Google/Outlook link              |
-| Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested; minutes not yet written by a real model, only the mock (2026-10-26)                                                         |
-| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-28) against the mock Gnani and mock AI servers: 49 checks, `npm run test:e2e`                                   |
-| Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                 |
-| Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share              |
-| Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                             |
-| Gnani realtime STT client                                         | **Run against the real API** (2026-10-23), alone and in the full app with real answers — see [what was checked](#checked-against-the-real-api) |
-| Windows installer (NSIS)                                          | Config done; build the `.exe` with `npm run dist:win`                                                                                          |
+| Area                                                              | State                                                                                                                                                          |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Audio pipeline, transcript, echo removal, question detection      | Done, unit-tested                                                                                                                                              |
+| Context files: loading, chunking, selection                       | Done, unit-tested                                                                                                                                              |
+| Answers: source parsing, number check, labels, trigger precedence | Done, unit-tested                                                                                                                                              |
+| Meaning line for mixed-language speech                            | Done, unit-tested                                                                                                                                              |
+| Modes (Silent / Assist / Active) and pause                        | Done, unit-tested                                                                                                                                              |
+| Past meetings in answers, ask your meetings, catch-up, alerts     | Done, unit-tested and end to end with the mock model (2026-10-26)                                                                                              |
+| Calendar (iCal link or file), speaker names, guessing speakers    | Done, unit-tested and end to end with an .ics file and the mock model (2026-10-28). Not yet tried with a real Google/Outlook link                              |
+| Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested; minutes not yet written by a real model, only the mock (2026-10-26)                                                                         |
+| The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-28) against mock Gnani, AI and Google sign-in servers: 54 checks, `npm run test:e2e`; main-window UI: `node scripts/e2e-ui.mjs` |
+| Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                                 |
+| Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share                              |
+| Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                                             |
+| Gnani realtime STT client                                         | **Run against the real API** (2026-10-23), alone and in the full app with real answers — see [what was checked](#checked-against-the-real-api)                 |
+| Windows installer (NSIS)                                          | Config done; build the `.exe` with `npm run dist:win`                                                                                                          |
 
 Manual test plan: [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md). Design record:
 [docs/designs/bolo-context-copilot.md](docs/designs/bolo-context-copilot.md).
@@ -328,11 +328,11 @@ the transcript, meanings, answers and their sources as Markdown and JSON when a 
 
 Bolo reads your meetings three ways. Use any one; they can be combined.
 
-| Way | Setup | What you get |
-| --- | --- | --- |
-| **Sign in with Google** | A Google Cloud OAuth client (below), once | Live calendar, people, Meet links, agenda |
-| **Sign in with Outlook / Microsoft 365** | An Azure app registration (below), once | Live calendar, people, Teams links, agenda |
-| **iCal link or .ics file** | Nothing: paste the calendar's private iCal address | Read-only copy, refreshed every 10 minutes |
+| Way                                      | Setup                                              | What you get                               |
+| ---------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| **Sign in with Google**                  | A Google Cloud OAuth client (below), once          | Live calendar, people, Meet links, agenda  |
+| **Sign in with Outlook / Microsoft 365** | An Azure app registration (below), once            | Live calendar, people, Teams links, agenda |
+| **iCal link or .ics file**               | Nothing: paste the calendar's private iCal address | Read-only copy, refreshed every 10 minutes |
 
 Sign-in opens your browser; Bolo never sees your password. It asks for **read-only**
 calendar access, keeps the refresh token encrypted on this computer (Windows DPAPI), and

@@ -132,6 +132,11 @@ export class CopilotSession {
     return this.running;
   }
 
+  /** Epoch ms the call started (set by start()). */
+  get startedAt(): number {
+    return this.record.startedAt;
+  }
+
   get isPaused(): boolean {
     return this.pausedAt !== null;
   }

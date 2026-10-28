@@ -17,6 +17,7 @@ import { createRequire } from 'node:module';
 import { demoReply } from '../test/mock/demo-brain.ts';
 import { MockGnaniServer } from '../test/mock/mock-gnani-server.ts';
 import { MockLlmServer } from '../test/mock/mock-llm-server.ts';
+import { MockOAuthServer } from '../test/mock/mock-oauth-server.ts';
 import { SCRIPT, THEM_LINES, ME_LINES } from '../test/fixtures/script.ts';
 
 const repo = join(import.meta.dirname, '..');
@@ -77,6 +78,30 @@ writeFileSync(
 
 const gnani = new MockGnaniServer({ script: SCRIPT });
 const llm = new MockLlmServer({ reply: demoReply, tokenDelayMs: 15 });
+// Google sign-in and Calendar API stand-in; one meeting 40 minutes from now.
+const oauth = new MockOAuthServer({
+  email: 'krunal@example.com',
+  name: 'Krunal',
+  events: () => [
+    {
+      id: 'pricing1',
+      summary: 'Pricing review',
+      start: { dateTime: new Date(Date.now() + 40 * 60_000).toISOString() },
+      end: { dateTime: new Date(Date.now() + 70 * 60_000).toISOString() },
+      attendees: [{ email: 'priya.shah@example.com' }],
+      hangoutLink: 'https://meet.google.com/xyz-abcd-efg',
+    },
+  ],
+});
+const oauthUrl = await oauth.start();
+// What Windows' microphone privacy key would say; empty = no other app on the mic.
+const detectFile = join(home, 'mic-usage.txt');
+writeFileSync(detectFile, '');
+const zoomOnMic = [
+  'HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged\\C:#Users#a#AppData#Roaming#Zoom#bin#Zoom.exe',
+  '    LastUsedTimeStart    REG_QWORD    0x1dd66426f69034e',
+  '    LastUsedTimeStop    REG_QWORD    0x0',
+].join('\r\n');
 const sttUrl = await gnani.start();
 const llmUrl = await llm.start();
 const userText = (r) => {
@@ -101,6 +126,10 @@ const app = await electron.launch({
     ELECTRON_RUN_AS_NODE: undefined,
     BOLO_USER_DATA: join(appData, 'Bolo'),
     GNANI_API_KEY: 'test-key',
+    GOOGLE_CLIENT_ID: 'mock-client',
+    GOOGLE_CLIENT_SECRET: 'mock-secret',
+    BOLO_OAUTH_MOCK: oauthUrl,
+    BOLO_DETECT_FILE: detectFile,
     GNANI_STT_URL: sttUrl,
     LLM_BASE_URL: llmUrl,
     LLM_MODEL: 'mock-model',
@@ -125,10 +154,14 @@ try {
   page.on('pageerror', (e) => logs.push(`pageerror: ${e.message}`));
   const shot = (name) => page.screenshot({ path: join(shots, `${name}.png`) });
   const bounds = () =>
-    app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
+    app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((w) => !w.webContents.getURL().includes('#'))
+        .getBounds(),
+    );
 
   const win = await app.evaluate(({ BrowserWindow, screen }) => {
-    const w = BrowserWindow.getAllWindows()[0];
+    const w = BrowserWindow.getAllWindows().find((w) => !w.webContents.getURL().includes('#'));
     return {
       alwaysOnTop: w.isAlwaysOnTop(),
       bounds: w.getBounds(),
@@ -278,7 +311,12 @@ try {
     'screenshot sent to the vision model',
   );
   check(
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getOpacity() === 1),
+    await app.evaluate(
+      ({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()
+          .find((w) => !w.webContents.getURL().includes('#'))
+          .getOpacity() === 1,
+    ),
     'overlay is visible again after the capture',
   );
   await shot('7-screen-answer');
@@ -423,10 +461,45 @@ try {
   );
   check(true, 'main-window settings are synchronized with the overlay');
 
+  // Sign in to Google (mock provider): the account appears and its meeting is listed.
+  await lib.getByRole('button', { name: 'Connect Google Calendar' }).click();
+  await lib.getByText('krunal@example.com').first().waitFor({ timeout: 10000 });
+  const afterSignIn = await page.evaluate(() => window.bolo.getState());
+  const pricing = afterSignIn.calendar.events.find((e) => e.title === 'Pricing review');
+  check(
+    afterSignIn.integrations.accounts.length === 1 &&
+      pricing?.source === 'google:krunal@example.com' &&
+      pricing.attendees.join() === 'Priya Shah' &&
+      oauth.log.includes('POST /google/token'),
+    'Google sign-in (PKCE, loopback) connects and its meetings are merged into the calendar',
+  );
+  check(
+    !JSON.stringify(afterSignIn).includes('mock-access') &&
+      !JSON.stringify(afterSignIn).includes('mock-refresh') &&
+      !readFileSync(join(appData, 'Bolo', 'accounts.bin'))
+        .toString('latin1')
+        .includes('mock-refresh'),
+    'tokens never reach a window and are encrypted on disk',
+  );
+  await lib.screenshot({ path: join(shots, '13-settings-google.png') });
+
+  // Another app takes the microphone: the overlay offers to start Bolo.
+  writeFileSync(detectFile, zoomOnMic);
+  await page.getByText('Zoom call detected').waitFor({ timeout: 10000 });
+  check(true, 'a Zoom call on the microphone is detected and offered');
+  await page.waitForTimeout(400); // past the strip's fade-in
+  await shot('14-zoom-detected');
+  writeFileSync(detectFile, '');
+  await page.locator('.detected-offer').waitFor({ state: 'detached', timeout: 10000 });
+  check(true, 'the offer goes when Zoom lets go of the microphone');
+
   // A second meeting, started from the calendar: it takes the invite's title, people and
   // agenda, and Bolo answers from the first meeting's minutes.
   await page.getByRole('tab', { name: 'Context' }).click();
-  await page.locator('.events button', { hasText: 'Start' }).click();
+  await page
+    .locator('.events li', { hasText: 'Mehta follow-up' })
+    .getByRole('button', { name: 'Start' })
+    .click();
   await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
   await page.getByLabel('Ask Bolo').fill('what did they want on whatsapp?');
   await page.getByLabel('Ask Bolo').press('Enter');
@@ -475,6 +548,7 @@ try {
   await app.close();
   await gnani.stop();
   await llm.stop();
+  await oauth.stop();
 }
 if (failures.length) {
   console.error(`E2E FAILED (${failures.length})`);

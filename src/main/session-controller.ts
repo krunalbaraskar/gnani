@@ -55,6 +55,11 @@ export class SessionController {
     return this.session?.isRunning ?? false;
   }
 
+  /** When the running call started, or null. */
+  get startedAt(): number | null {
+    return this.session?.isRunning ? this.session.startedAt : null;
+  }
+
   get paused(): boolean {
     return this.session?.isPaused ?? false;
   }
@@ -118,7 +123,7 @@ export class SessionController {
     });
     session.start();
     this.session = session;
-    emit({ type: 'session', running: true });
+    emit({ type: 'session', running: true, startedAt: session.startedAt });
     return { ok: true };
   }
 
