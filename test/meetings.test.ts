@@ -215,3 +215,22 @@ describe('MeetingService memory', () => {
     });
   });
 });
+
+describe('meeting previews', () => {
+  it('show minutes as prose, without list markers or task boxes', async () => {
+    const service = new MeetingService({
+      store: new MeetingStore(tempDir()),
+      llm: () =>
+        llm(
+          '# Sync\n## Summary\nThe van is late.\n## Action items\n- [x] **Me** — call the transporter',
+        ),
+      writer: () => ({ myName: '', language: 'English' }),
+      emit: () => {},
+    });
+    const m = await service.saveRecord(record(T0, ['The van is late.']));
+    await service.writeMinutes(m.id);
+    const [summary] = await service.list();
+    expect(summary!.snippet).toBe('The van is late. Me — call the transporter');
+    expect(summary!.snippet).not.toMatch(/\[x\]|^-|\*\*/);
+  });
+});

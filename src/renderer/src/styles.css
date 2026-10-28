@@ -13,7 +13,7 @@
   --text: #1d1c1d;
   --bold: #000000;
   --muted: #616061;
-  --accent: #1e75be;
+  --accent: #1264a3; /* Slack link blue: 4.5:1 even on --accent-soft */
   --accent-hover: #195f9c;
   --accent-ink: #ffffff;
   --accent-soft: #f5f9fd;
@@ -405,7 +405,8 @@ textarea {
   border: 2px solid var(--card);
   width: 36px;
   height: 36px;
-  margin-left: -18px;
+  /* A slight overlap, like Slack's stacks: every avatar's initials stay readable at any size. */
+  margin-left: -6px;
 }
 .people .avatar:first-child {
   margin-left: 0;

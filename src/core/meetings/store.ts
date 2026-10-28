@@ -82,9 +82,18 @@ function searchText(m: StoredMeeting): string {
 }
 
 /** Around the first query word found, or the start of the minutes/transcript. */
+/** Minutes as plain prose for a preview: no headings, date line, list markers or task boxes. */
+function plainMinutes(md: string): string {
+  return md
+    .replace(/^#.*$/gm, '')
+    .replace(/\*\*Date:\*\*.*$/m, '')
+    .replace(/^\s*[-*]\s+(\[[ xX]\]\s+)?/gm, '')
+    .replace(/[#*_`]/g, '');
+}
+
 function snippetOf(m: StoredMeeting, words: readonly string[]): string {
   const sources = [
-    m.minutes?.markdown.replace(/^#.*$/gm, '').replace(/\*\*Date:\*\*.*$/m, '') ?? '',
+    m.minutes ? plainMinutes(m.minutes.markdown) : '',
     ...m.record.segments.map((s) => s.text),
     m.notes,
   ];
@@ -96,7 +105,7 @@ function snippetOf(m: StoredMeeting, words: readonly string[]): string {
       return (from > 0 ? '…' : '') + cleanText(src.slice(from, i + 90).replace(/[#*_`]/g, ''));
     }
   }
-  return cleanText(sources.find((s) => s.trim())?.replace(/[#*_`]/g, '') ?? '').slice(0, 140);
+  return cleanText(sources.find((s) => s.trim()) ?? '').slice(0, 140);
 }
 
 export function toSummary(

@@ -11,18 +11,18 @@ windows, so this spec maps each element onto Bolo.
 
 Tokens (from the reference's `appTheme.js` and component styles):
 
-| Token | Light | Dark |
-| --- | --- | --- |
-| primary (header bars, FAB, sheet titles) | `#3E3139` aubergine | `#121115` |
-| background | `#FFFFFF` | `#19181C` |
-| backgroundSecondary (inputs, hovers, menus) | `#E9E9E9` (use `#F4F4F4` for large areas) | `#212527` |
-| text | `#000000` (use `#1D1C1D`) | `#D8D8D9` |
-| boldText (names, titles) | `#000000` | `#D0D0D0` |
-| dimmedText (times, previews) | `#979A9A` (use `#616061` where it must pass 4.5:1) | `#9A9A9D` |
-| linkText / send / mentions-of-files | `#1E75BE` | `#1E75BE` (lighten for contrast) |
-| border / separators | `#D3D3D3` | `#252529` |
-| online / positive | `#117A58` | `#2BAC76` |
-| notification / destructive | `rgb(255,69,58)` (`#E01E5A` for text) | same |
+| Token                                       | Light                                              | Dark                             |
+| ------------------------------------------- | -------------------------------------------------- | -------------------------------- |
+| primary (header bars, FAB, sheet titles)    | `#3E3139` aubergine                                | `#121115`                        |
+| background                                  | `#FFFFFF`                                          | `#19181C`                        |
+| backgroundSecondary (inputs, hovers, menus) | `#E9E9E9` (use `#F4F4F4` for large areas)          | `#212527`                        |
+| text                                        | `#000000` (use `#1D1C1D`)                          | `#D8D8D9`                        |
+| boldText (names, titles)                    | `#000000`                                          | `#D0D0D0`                        |
+| dimmedText (times, previews)                | `#979A9A` (use `#616061` where it must pass 4.5:1) | `#9A9A9D`                        |
+| linkText / send / mentions-of-files         | `#1E75BE`                                          | `#1E75BE` (lighten for contrast) |
+| border / separators                         | `#D3D3D3`                                          | `#252529`                        |
+| online / positive                           | `#117A58`                                          | `#2BAC76`                        |
+| notification / destructive                  | `rgb(255,69,58)` (`#E01E5A` for text)              | same                             |
 
 Type: Lato in the reference — use `Lato, "Segoe UI", system-ui, sans-serif` (Lato only if
 installed; no web fonts). Names 15 px weight 800–900, body 15 px, times 11 px grey (the

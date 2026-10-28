@@ -14,7 +14,7 @@ the bottom, calm banners.
 ## Hard constraints (same as the app redesign)
 
 - **No new npm dependencies**, no web fonts, no external assets (CSP is `default-src
-  'self'`). System font stack; inline SVG icons via `components/Icon.tsx`.
+'self'`). System font stack; inline SVG icons via `components/Icon.tsx`.
 - **Do not change** `src/main/**`, `src/preload/**`, `src/core/**`, `src/shared/**`.
   Contract requests go in your final message.
 - `npm run typecheck`, `npm run lint`, `npm test`, `npx prettier --check src test scripts`

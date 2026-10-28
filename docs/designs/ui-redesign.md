@@ -28,11 +28,11 @@ dashboard, and a refreshed in-call **overlay**.
 
 `src/renderer/src/main.tsx` picks the root from `location.hash`:
 
-| Hash | Root |
-|---|---|
-| (none) | Overlay (`App.tsx`) — in-call bar, always on top, hidden from screen share |
-| `#app/home` · `#app/meetings[/<meetingId>]` · `#app/ask` · `#app/settings` | Main window (new) |
-| `#library[/<id>]` | Alias of `#app/meetings[/<id>]` (old links) |
+| Hash                                                                       | Root                                                                       |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| (none)                                                                     | Overlay (`App.tsx`) — in-call bar, always on top, hidden from screen share |
+| `#app/home` · `#app/meetings[/<meetingId>]` · `#app/ask` · `#app/settings` | Main window (new)                                                          |
+| `#library[/<id>]`                                                          | Alias of `#app/meetings[/<id>]` (old links)                                |
 
 The main window listens for `{ type: 'navigate', section, meetingId? }` events and must
 switch section (and select the meeting) when one arrives. Use `history.replaceState` to

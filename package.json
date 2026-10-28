@@ -28,7 +28,9 @@
     "mock-gnani": "node scripts/mock-gnani.ts",
     "test:e2e": "node scripts/e2e-electron.mjs",
     "mock-llm": "node scripts/mock-llm.ts",
-    "test:live": "node scripts/e2e-live.mjs"
+    "test:live": "node scripts/e2e-live.mjs",
+    "test:ui": "node scripts/e2e-ui.mjs",
+    "test:pages": "node scripts/check-pages.mjs"
   },
   "dependencies": {
     "ws": "^8.22.0"
