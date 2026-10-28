@@ -1,4 +1,9 @@
 const PATHS = {
+  home: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10',
+  settings: 'M9 3h6l1 4 4 1v8l-4 1-1 4H9l-1-4-4-1V8l4-1zM12 9a3 3 0 100 6 3 3 0 000-6',
+  calendar: 'M4 5h16v15H4zM4 10h16M8 3v4M16 3v4M8 14h3M14 14h2',
+  check: 'M5 12l4 4L19 6',
+  arrow: 'M5 12h14M13 6l6 6-6 6',
   play: 'M7 5v14l11-7z',
   stop: 'M7 7h10v10H7z',
   shield: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z',

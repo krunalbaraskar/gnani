@@ -124,7 +124,12 @@ export function ContextTab({
   const name = useDraft(s.myName, (myName) => onChange({ myName }));
   const watch = useDraft(s.watchWords, (watchWords) => onChange({ watchWords }));
   return (
-    <div className="context">
+    <div
+      className="context"
+      role="tabpanel"
+      id="overlay-panel-context"
+      aria-labelledby="overlay-tab-context"
+    >
       <label className="inline">
         My name
         <input

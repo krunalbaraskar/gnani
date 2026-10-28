@@ -13,7 +13,9 @@ import { ContextTab } from './components/ContextTab.tsx';
 import { Icon } from './components/Icon.tsx';
 import { SettingsPanel, type ReplaySelection } from './components/SettingsPanel.tsx';
 import { Line, Transcript } from './components/Transcript.tsx';
+import { moveTab } from './components/Tabs.tsx';
 import { initialUiState, uiReducer, type Tab } from './state.ts';
+import { onSettingsChanged, settingsChanged } from './app/settings-sync.ts';
 
 const TABS: [Tab, string][] = [
   ['live', 'Live'],
@@ -27,6 +29,7 @@ export function App() {
   const [files, setFiles] = useState<ReplaySelection>({ me: null, them: null });
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [menu, setMenu] = useState(false);
+  const [dismissedCalls, setDismissedCalls] = useState<ReadonlySet<string>>(new Set());
   const shell = useRef<HTMLDivElement>(null);
   const source = useRef<AudioSourceController | null>(null);
   const ports = useRef<Partial<Record<Speaker, MessagePort>>>({});
@@ -35,6 +38,17 @@ export function App() {
   useEffect(() => {
     void window.bolo.getState().then((app) => dispatch({ type: 'init', app }));
     return window.bolo.onEvent((event) => dispatch({ type: 'event', event }));
+  }, []);
+
+  useEffect(() => {
+    const refresh = () =>
+      void window.bolo.getState().then((app) => dispatch({ type: 'init', app }));
+    const stopSettingsSync = onSettingsChanged(refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      stopSettingsSync();
+      window.removeEventListener('focus', refresh);
+    };
   }, []);
 
   // The window is exactly as tall as the bar plus whatever is open under it.
@@ -83,6 +97,7 @@ export function App() {
   const updateSettings = useCallback(async (patch: Partial<Settings>) => {
     const settings = await window.bolo.updateSettings(patch);
     dispatch({ type: 'settings', settings });
+    settingsChanged();
   }, []);
 
   const teardownAudio = useCallback(() => {
@@ -92,6 +107,15 @@ export function App() {
     ports.current = {};
     dispatch({ type: 'capturing', capturing: false });
   }, []);
+
+  // A stop initiated in the main window must also release the overlay's capture devices.
+  useEffect(
+    () =>
+      window.bolo.onEvent((event) => {
+        if (event.type === 'session' && !event.running) teardownAudio();
+      }),
+    [teardownAudio],
+  );
 
   const stop = useCallback(async () => {
     teardownAudio();
@@ -112,8 +136,9 @@ export function App() {
   // `eventKey`: a calendar meeting, whose title, people and agenda the call takes on.
   const start = useCallback(
     async (eventKey?: string) => {
-      const settings = state.app?.settings;
-      if (!settings) return;
+      const fresh = await window.bolo.getState();
+      dispatch({ type: 'init', app: fresh });
+      const settings = fresh.settings;
       if (settings.audioMode === 'file' && !files.me && !files.them) {
         dispatch({ type: 'panel', panel: 'settings' });
         dispatch({
@@ -172,7 +197,7 @@ export function App() {
         dispatch({ type: 'start-failed', error: (err as Error).message });
       }
     },
-    [state.app?.settings, files, stop, teardownAudio],
+    [files, stop, teardownAudio],
   );
   // "Start" pressed in the main window or on a notice: audio is captured here.
   const startRef = useRef(start);
@@ -236,6 +261,9 @@ export function App() {
 
       {menu && (
         <div className="strip menu">
+          <button className="ghost small" onClick={() => window.bolo.openApp('home')}>
+            <Icon name="home" size={13} /> Open Bolo
+          </button>
           <button className="ghost small" onClick={() => window.bolo.openLibrary()}>
             <Icon name="book" size={13} /> Meetings
           </button>
@@ -286,6 +314,28 @@ export function App() {
           </button>
         </div>
       )}
+      {!offer &&
+        app.detected &&
+        !state.running &&
+        !state.starting &&
+        !needsConsent &&
+        !dismissedCalls.has(app.detected.key) && (
+          <div className="strip detected-offer" role="status">
+            <span className="mention-text">
+              <strong>{app.detected.app} call detected</strong>
+            </span>
+            <button className="ghost small primary-ish" onClick={() => void start()}>
+              Start with Bolo
+            </button>
+            <button
+              className="icon"
+              title="Dismiss detected call"
+              onClick={() => setDismissedCalls((d) => new Set(d).add(app.detected!.key))}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        )}
       {state.mention && (
         <div className={`strip mention ${state.mention.asked ? 'asked' : ''}`} role="alert">
           <span className="mention-text">
@@ -324,6 +374,28 @@ export function App() {
           }}
         >
           {state.notice.message}
+          {state.notice.meetingId && (
+            <button
+              className="ghost small"
+              onClick={(event) => {
+                event.stopPropagation();
+                window.bolo.openLibrary(state.notice!.meetingId);
+                dispatch({ type: 'dismiss-notice' });
+              }}
+            >
+              Open
+            </button>
+          )}
+          <button
+            className="icon"
+            aria-label="Dismiss notification"
+            onClick={(event) => {
+              event.stopPropagation();
+              dispatch({ type: 'dismiss-notice' });
+            }}
+          >
+            <Icon name="close" size={14} />
+          </button>
         </div>
       )}
 
@@ -339,12 +411,15 @@ export function App() {
       ) : (
         state.open && (
           <div className="panel">
-            <nav className="tabs" role="tablist">
+            <nav className="tabs" role="tablist" aria-label="Call tools" onKeyDown={moveTab}>
               {TABS.map(([tab, label]) => (
                 <button
                   key={tab}
                   role="tab"
                   aria-selected={state.panel === tab}
+                  tabIndex={state.panel === tab ? 0 : -1}
+                  id={`overlay-tab-${tab}`}
+                  aria-controls={`overlay-panel-${tab}`}
                   className={state.panel === tab ? 'on' : ''}
                   onClick={() => dispatch({ type: 'panel', panel: tab })}
                 >
@@ -369,7 +444,12 @@ export function App() {
             </nav>
 
             {state.panel === 'live' && (
-              <div className="live">
+              <div
+                className="live"
+                role="tabpanel"
+                id="overlay-panel-live"
+                aria-labelledby="overlay-tab-live"
+              >
                 {!app.keys.stt && (
                   <p className="error-text">
                     {app.stt.keyVar} is missing. Add it to .env and restart Bolo.
