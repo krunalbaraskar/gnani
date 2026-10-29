@@ -5,7 +5,7 @@ import { mergeEnv, parseDotEnv } from '../core/util/dotenv.ts';
 import { GNANI_DEFAULT_STT_URL } from '../core/stt/gnani-protocol.ts';
 import { WHISPER_DEFAULT_BASE_URL, WHISPER_DEFAULT_MODEL } from '../core/stt/whisper-provider.ts';
 
-export interface BoloEnv {
+export interface EchoEnv {
   /** gnani (default), or whisper: any OpenAI-compatible transcription endpoint, e.g. Groq. */
   sttProvider: 'gnani' | 'whisper';
   whisperBaseUrl: string;
@@ -41,12 +41,12 @@ function readEnvFile(path: string): Record<string, string> {
   }
 }
 
-/** Real env vars, then <cwd>/.env (dev), then %APPDATA%/Bolo/.env (installed app). */
+/** Real env vars, then <cwd>/.env (dev), then %APPDATA%/Echo/.env (installed app). */
 export function envFilePaths(): string[] {
   return [join(process.cwd(), '.env'), join(app.getPath('userData'), '.env')];
 }
 
-function sameOrigin(a: string, b: string): boolean {
+export function sameOrigin(a: string, b: string): boolean {
   try {
     return new URL(a).origin === new URL(b).origin;
   } catch {
@@ -55,7 +55,7 @@ function sameOrigin(a: string, b: string): boolean {
 }
 
 /** What the overlay shows about speech-to-text. Never includes a key. */
-export function sttInfo(env: BoloEnv): { name: string; keyVar: string; key: boolean; url: string } {
+export function sttInfo(env: EchoEnv): { name: string; keyVar: string; key: boolean; url: string } {
   return env.sttProvider === 'whisper'
     ? {
         name: `Whisper (${env.whisperModel})`,
@@ -66,7 +66,7 @@ export function sttInfo(env: BoloEnv): { name: string; keyVar: string; key: bool
     : { name: 'Gnani', keyVar: 'GNANI_API_KEY', key: !!env.gnaniApiKey, url: env.gnaniSttUrl };
 }
 
-export function loadEnv(): BoloEnv {
+export function loadEnv(): EchoEnv {
   const env = mergeEnv(process.env, ...envFilePaths().map(readEnvFile));
   const llmBaseUrl = env['LLM_BASE_URL'] ?? '';
   const whisperBaseUrl = env['WHISPER_BASE_URL'] || WHISPER_DEFAULT_BASE_URL;
@@ -84,14 +84,14 @@ export function loadEnv(): BoloEnv {
     llmModel: env['LLM_MODEL'] ?? '',
     llmApiKey: env['LLM_API_KEY'] ?? '',
     llmReasoningEffort: (env['LLM_REASONING_EFFORT'] ?? '').trim().toLowerCase(),
-    opaqueWindow: env['BOLO_OPAQUE_WINDOW'] === '1',
-    recordable: env['BOLO_RECORDABLE'] === '1',
+    opaqueWindow: env['ECHO_OPAQUE_WINDOW'] === '1',
+    recordable: env['ECHO_RECORDABLE'] === '1',
     googleClientId: env['GOOGLE_CLIENT_ID'] ?? '',
     googleClientSecret: env['GOOGLE_CLIENT_SECRET'] ?? '',
     microsoftClientId: env['MICROSOFT_CLIENT_ID'] ?? '',
     microsoftTenant: env['MICROSOFT_TENANT'] || 'common',
     // Never in an installed app: tokens must only ever go to the real providers.
-    oauthMockBase: app.isPackaged ? '' : (env['BOLO_OAUTH_MOCK'] ?? ''),
-    detectFile: app.isPackaged ? '' : (env['BOLO_DETECT_FILE'] ?? ''),
+    oauthMockBase: app.isPackaged ? '' : (env['ECHO_OAUTH_MOCK'] ?? ''),
+    detectFile: app.isPackaged ? '' : (env['ECHO_DETECT_FILE'] ?? ''),
   };
 }

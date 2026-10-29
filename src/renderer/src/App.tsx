@@ -72,13 +72,13 @@ export function App() {
   const levelTimer = useRef<Record<Speaker, number>>({ me: 0, them: 0 });
 
   useEffect(() => {
-    void window.bolo.getState().then((app) => dispatch({ type: 'init', app }));
-    return window.bolo.onEvent((event) => dispatch({ type: 'event', event }));
+    void window.echo.getState().then((app) => dispatch({ type: 'init', app }));
+    return window.echo.onEvent((event) => dispatch({ type: 'event', event }));
   }, []);
 
   useEffect(() => {
     const refresh = () =>
-      void window.bolo.getState().then((app) => dispatch({ type: 'init', app }));
+      void window.echo.getState().then((app) => dispatch({ type: 'init', app }));
     const stopSettingsSync = onSettingsChanged(refresh);
     window.addEventListener('focus', refresh);
     return () => {
@@ -93,7 +93,7 @@ export function App() {
     const el = shell.current;
     if (!el) return;
     const report = () =>
-      window.bolo.window({
+      window.echo.window({
         kind: 'resize',
         width: 0,
         height: Math.ceil(el.getBoundingClientRect().height),
@@ -131,7 +131,7 @@ export function App() {
   }, [state.notice]);
 
   const updateSettings = useCallback(async (patch: Partial<Settings>) => {
-    const settings = await window.bolo.updateSettings(patch);
+    const settings = await window.echo.updateSettings(patch);
     dispatch({ type: 'settings', settings });
     settingsChanged();
   }, []);
@@ -147,7 +147,7 @@ export function App() {
   // A stop initiated in the main window must also release the overlay's capture devices.
   useEffect(
     () =>
-      window.bolo.onEvent((event) => {
+      window.echo.onEvent((event) => {
         if (event.type === 'session' && !event.running) teardownAudio();
       }),
     [teardownAudio],
@@ -155,7 +155,7 @@ export function App() {
 
   const stop = useCallback(async () => {
     teardownAudio();
-    const res = await window.bolo.stopSession();
+    const res = await window.echo.stopSession();
     if (res.meetingId)
       dispatch({
         type: 'notice',
@@ -172,7 +172,7 @@ export function App() {
   // `eventKey`: a calendar meeting, whose title, people and agenda the call takes on.
   const start = useCallback(
     async (eventKey?: string) => {
-      const fresh = await window.bolo.getState();
+      const fresh = await window.echo.getState();
       dispatch({ type: 'init', app: fresh });
       const settings = fresh.settings;
       if (settings.audioMode === 'file' && !files.me && !files.them) {
@@ -185,7 +185,7 @@ export function App() {
         return;
       }
       dispatch({ type: 'starting' });
-      const res = await window.bolo.startSession(eventKey);
+      const res = await window.echo.startSession(eventKey);
       if (!res.ok) {
         dispatch({ type: 'start-failed', error: res.error });
         return;
@@ -233,7 +233,7 @@ export function App() {
         dispatch({ type: 'capturing', capturing: true });
       } catch (err) {
         teardownAudio();
-        await window.bolo.stopSession();
+        await window.echo.stopSession();
         dispatch({ type: 'start-failed', error: (err as Error).message });
       }
     },
@@ -244,14 +244,14 @@ export function App() {
   startRef.current = start;
   useEffect(
     () =>
-      window.bolo.onEvent((event) => {
+      window.echo.onEvent((event) => {
         if (event.type === 'start-request' && !state.running) void startRef.current(event.eventKey);
       }),
     [state.running],
   );
 
   const loadDemo = useCallback(async () => {
-    const demo = await window.bolo.readDemoAudio();
+    const demo = await window.echo.readDemoAudio();
     if (!demo.me && !demo.them) {
       dispatch({
         type: 'notice',
@@ -311,26 +311,26 @@ export function App() {
           ref={menuRef}
           onClick={() => setMenu(false)}
         >
-          <button className="ghost small" onClick={() => window.bolo.openApp('home')}>
-            <Icon name="home" size={13} /> Open Bolo
+          <button className="ghost small" onClick={() => window.echo.openApp('home')}>
+            <Icon name="home" size={13} /> Open Echo
           </button>
-          <button className="ghost small" onClick={() => window.bolo.openLibrary()}>
+          <button className="ghost small" onClick={() => window.echo.openLibrary()}>
             <Icon name="book" size={13} /> Meetings
           </button>
           <button
             className="ghost small"
-            onClick={() => window.bolo.window({ kind: 'toggle-click-through' })}
+            onClick={() => window.echo.window({ kind: 'toggle-click-through' })}
           >
             <Icon name="cursor" /> Click-through <kbd>Ctrl+Shift+M</kbd>
           </button>
-          <button className="ghost small" onClick={() => window.bolo.window({ kind: 'hide' })}>
+          <button className="ghost small" onClick={() => window.echo.window({ kind: 'hide' })}>
             <Icon name="hide" /> Hide <kbd>Ctrl+Shift+H</kbd>
           </button>
           <button
             className="ghost small danger"
-            onClick={() => window.bolo.window({ kind: 'quit' })}
+            onClick={() => window.echo.window({ kind: 'quit' })}
           >
-            <Icon name="close" /> Quit Bolo
+            <Icon name="close" /> Quit Echo
           </button>
         </div>
       )}
@@ -338,11 +338,11 @@ export function App() {
       {state.clickThrough && (
         <div className="strip click-through-banner" role="status">
           <Icon name="info" />
-          <span className="mention-text">Click-through on — Ctrl+Shift+M to use Bolo</span>
+          <span className="mention-text">Click-through on — Ctrl+Shift+M to use Echo</span>
           <button
             className="icon"
             title="Turn off click-through"
-            onClick={() => window.bolo.window({ kind: 'toggle-click-through' })}
+            onClick={() => window.echo.window({ kind: 'toggle-click-through' })}
           >
             <Icon name="close" size={14} />
           </button>
@@ -359,14 +359,14 @@ export function App() {
           {offer.event.joinUrl && (
             <button
               className="ghost small"
-              onClick={() => window.bolo.openJoinLink(offer.event.key)}
+              onClick={() => window.echo.openJoinLink(offer.event.key)}
               title="Open the meeting link in your browser"
             >
               Join
             </button>
           )}
           <button className="ghost small primary-ish" onClick={() => void start(offer.event.key)}>
-            Start with Bolo
+            Start with Echo
           </button>
           <button
             className="icon"
@@ -389,7 +389,7 @@ export function App() {
               <strong>{app.detected.app} call detected</strong>
             </span>
             <button className="ghost small primary-ish" onClick={() => void start()}>
-              Start with Bolo
+              Start with Echo
             </button>
             <button
               className="icon"
@@ -413,7 +413,7 @@ export function App() {
             <button
               className="ghost small"
               onClick={() => {
-                window.bolo.requestSuggestion();
+                window.echo.requestSuggestion();
                 dispatch({ type: 'dismiss-mention' });
               }}
             >
@@ -439,7 +439,7 @@ export function App() {
             <button
               className="notice-message"
               onClick={() => {
-                window.bolo.openLibrary(state.notice!.meetingId);
+                window.echo.openLibrary(state.notice!.meetingId);
                 dispatch({ type: 'dismiss-notice' });
               }}
             >
@@ -455,7 +455,7 @@ export function App() {
               className="ghost small"
               onClick={(event) => {
                 event.stopPropagation();
-                window.bolo.openLibrary(state.notice!.meetingId);
+                window.echo.openLibrary(state.notice!.meetingId);
                 dispatch({ type: 'dismiss-notice' });
               }}
             >
@@ -530,12 +530,12 @@ export function App() {
               >
                 {!app.keys.stt && (
                   <p className="error-text">
-                    {app.stt.keyVar} is missing. Add it to .env and restart Bolo.
+                    {app.stt.keyVar} is missing. Add it to .env and restart Echo.
                   </p>
                 )}
                 {!app.context.dir && !state.running && (
                   <p className="hint">
-                    Add a context folder so Bolo can answer from your files.{' '}
+                    Add a context folder so Echo can answer from your files.{' '}
                     <button
                       className="link"
                       onClick={() => dispatch({ type: 'panel', panel: 'context' })}
@@ -584,10 +584,10 @@ export function App() {
                 onLoadDemo={() => void loadDemo()}
                 onChange={(p) => void updateSettings(p)}
                 onChooseExportDir={() =>
-                  void window.bolo
+                  void window.echo
                     .chooseExportDir()
                     .then(() =>
-                      window.bolo.getState().then((a) => dispatch({ type: 'init', app: { ...a } })),
+                      window.echo.getState().then((a) => dispatch({ type: 'init', app: { ...a } })),
                     )
                 }
               />
@@ -605,7 +605,7 @@ export function App() {
                 onSubmit={() => {
                   const text = question.trim();
                   if (!text || !state.running || state.clickThrough) return;
-                  window.bolo.ask(text, withScreen && !!s.llmVisionModel);
+                  window.echo.ask(text, withScreen && !!s.llmVisionModel);
                   setQuestion('');
                   setWithScreen(false);
                 }}

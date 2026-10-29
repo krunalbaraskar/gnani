@@ -23,6 +23,6 @@ export function minutesDocument(title: string, markdown: string): string {
 </style></head>
 <body>
 ${markdownToHtml(markdown)}
-<footer>Minutes written by Bolo from the meeting transcript. Check before sharing.</footer>
+<footer>Minutes written by Echo from the meeting transcript. Check before sharing.</footer>
 </body></html>`;
 }

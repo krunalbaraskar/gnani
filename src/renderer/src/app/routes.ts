@@ -8,6 +8,7 @@ export interface AppRoute {
 export function parseRoute(hash: string): AppRoute {
   const match = /^#(?:library|app\/meetings)(?:\/(m\d+))?$/.exec(hash);
   if (match) return { section: 'meetings', meetingId: match[1] };
+  if (hash === '#app/todo') return { section: 'todo' };
   if (hash === '#app/ask') return { section: 'ask' };
   if (hash === '#app/settings') return { section: 'settings' };
   return { section: 'home' };

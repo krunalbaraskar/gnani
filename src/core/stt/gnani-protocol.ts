@@ -1,6 +1,6 @@
 /**
  * Gnani realtime STT wire protocol — the ONE place that encodes what we believe about
- * Gnani's API. Everything else in Bolo talks to the generic SttProvider interface.
+ * Gnani's API. Everything else in Echo talks to the generic SttProvider interface.
  *
  * Taken from the official `gnani-vachana` Python SDK v0.7.9 on PyPI (gnani/stt/client.py,
  * GnaniSTTStreamClient), then checked against the live API with a real key on
@@ -44,7 +44,7 @@ export interface GnaniLanguage {
  * v0.7.8); for Hinglish use hi-IN, which writes English words in Devanagari.
  */
 export const GNANI_LANGUAGES: readonly GnaniLanguage[] = [
-  { code: 'hi-IN', label: 'Hindi', supportsItn: true },
+  { code: 'hi-IN', label: 'Hindi (with Hinglish)', supportsItn: true },
   { code: 'en-IN', label: 'English (India)', supportsItn: true },
   { code: 'ta-IN', label: 'Tamil' },
   { code: 'te-IN', label: 'Telugu' },

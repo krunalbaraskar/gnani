@@ -35,7 +35,7 @@ function record(startedAt: number, lines: string[]): SessionRecord {
 }
 
 const T0 = 1_790_000_000_000;
-const tempDir = () => mkdtempSync(join(tmpdir(), 'bolo-meetings-'));
+const tempDir = () => mkdtempSync(join(tmpdir(), 'echo-meetings-'));
 
 const MINUTES =
   '# Pricing review\n## Summary\nWe agreed on the price.\n## Action items\n- [ ] **Me** — send the quote';

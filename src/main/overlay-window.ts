@@ -31,10 +31,11 @@ export function createOverlayWindow(opts: OverlayOptions): BrowserWindow {
     backgroundColor: opts.opaque ? '#15171c' : '#00000000',
     resizable: false,
     alwaysOnTop: true,
-    skipTaskbar: false,
+    // Stay out of the taskbar; the overlay's menu ("Open Echo") reopens the main window.
+    skipTaskbar: true,
     hasShadow: false,
     show: false,
-    title: 'Bolo',
+    title: 'Echo',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
       contextIsolation: true,

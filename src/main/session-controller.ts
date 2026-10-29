@@ -7,17 +7,21 @@ import { GnaniSttProvider } from '../core/stt/gnani-provider.ts';
 import type { SttProvider } from '../core/stt/types.ts';
 import { WhisperSttProvider } from '../core/stt/whisper-provider.ts';
 import type { Logger } from '../core/util/logger.ts';
-import type { BoloEvent, StartResult } from '../shared/ipc.ts';
+import type { EchoEvent, StartResult } from '../shared/ipc.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Speaker } from '../shared/transcript/types.ts';
-import type { BoloEnv } from './env.ts';
+import { sameOrigin, type EchoEnv } from './env.ts';
 
-/** Effective LLM config: settings override env defaults. The key is env-only. */
-export function llmConfig(settings: Settings, env: BoloEnv) {
+/**
+ * Effective LLM config: settings override env defaults. The key is env-only, and only
+ * goes to the server .env names: a URL typed into Settings never receives it.
+ */
+export function llmConfig(settings: Settings, env: EchoEnv) {
+  const baseUrl = settings.llmBaseUrl || env.llmBaseUrl;
   return {
-    baseUrl: settings.llmBaseUrl || env.llmBaseUrl,
+    baseUrl,
     model: settings.llmModel || env.llmModel,
-    apiKey: env.llmApiKey || undefined,
+    apiKey: (sameOrigin(baseUrl, env.llmBaseUrl) && env.llmApiKey) || undefined,
     reasoningEffort: env.llmReasoningEffort || undefined,
   };
 }
@@ -31,17 +35,17 @@ export function languageName(code: string): string {
 /** Owns the current CopilotSession and forwards its events to the overlay. */
 export class SessionController {
   private session: CopilotSession | null = null;
-  private readonly getEnv: () => BoloEnv;
+  private readonly getEnv: () => EchoEnv;
   private readonly getSettings: () => Settings;
   private readonly getContext: () => LoadedContext | null;
-  private readonly emit: (e: BoloEvent) => void;
+  private readonly emit: (e: EchoEvent) => void;
   private readonly log: Logger;
 
   constructor(
-    getEnv: () => BoloEnv,
+    getEnv: () => EchoEnv,
     getSettings: () => Settings,
     getContext: () => LoadedContext | null,
-    emit: (e: BoloEvent) => void,
+    emit: (e: EchoEvent) => void,
     log: Logger,
   ) {
     this.getEnv = getEnv;
@@ -78,7 +82,7 @@ export class SessionController {
     if (env.sttProvider === 'gnani' && !env.gnaniApiKey) {
       return {
         ok: false,
-        error: 'GNANI_API_KEY is not set. Add it to your .env file and restart Bolo.',
+        error: 'GNANI_API_KEY is not set. Add it to your .env file and restart Echo.',
       };
     }
     // A local Whisper server needs no key, so a missing one is only reported if refused.

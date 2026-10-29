@@ -37,11 +37,11 @@ export function Onboarding(props: SettingsProps) {
         <span className="brand-mark">
           <Icon name="sparkle" size={20} />
         </span>{' '}
-        Bolo
+        Echo
       </div>
       <div className="onboarding-card">
         <header>
-          <p className="eyebrow">Welcome to Bolo</p>
+          <p className="eyebrow">Welcome to Echo</p>
           <ol className="step-dots" aria-label="Setup progress">
             {STEPS.map((label, i) => (
               <li key={label} aria-current={i === step ? 'step' : undefined}>
@@ -57,14 +57,14 @@ export function Onboarding(props: SettingsProps) {
             Step {step + 1} of {STEPS.length}
           </p>
           <h1 ref={title} tabIndex={-1}>
-            {step === 0 ? 'Be here. Bolo remembers.' : STEPS[step]}
+            {step === 0 ? 'Be here. Echo remembers.' : STEPS[step]}
           </h1>
         </header>
         <div className="onboarding-body">
           {step === 0 && (
             <>
               <p>
-                Bolo is your meeting buddy for conversations in Indian languages. Get a little help
+                Echo is your meeting buddy for conversations in Indian languages. Get a little help
                 during the call, and clear minutes when it’s over.
               </p>
               <h2>Before you record a call</h2>
@@ -97,7 +97,7 @@ export function Onboarding(props: SettingsProps) {
               </ul>
               <p className="muted">
                 Remember to tell everyone before recording. Your files and saved meetings can help
-                Bolo answer with context.
+                Echo answer with context.
               </p>
             </>
           )}

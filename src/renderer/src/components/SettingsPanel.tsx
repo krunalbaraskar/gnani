@@ -365,7 +365,7 @@ export function SettingsPanel({
         <legend>After the meeting</legend>
         <p className="muted small">
           Every meeting is saved on this computer.{' '}
-          <button className="link" onClick={() => window.bolo.openLibrary()}>
+          <button className="link" onClick={() => window.echo.openLibrary()}>
             Open Meetings
           </button>
         </p>
@@ -393,7 +393,7 @@ export function SettingsPanel({
             Choose…
           </button>
           {s.exportDir && (
-            <button className="ghost small" onClick={() => window.bolo.openExportDir()}>
+            <button className="ghost small" onClick={() => window.echo.openExportDir()}>
               Open
             </button>
           )}

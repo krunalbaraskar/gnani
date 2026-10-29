@@ -606,6 +606,11 @@ button.send:disabled {
   max-height: 640px;
   color: var(--text);
 }
+/* The overlay keeps the plain arrow everywhere: no hand, text beam or resize cursors. */
+.shell,
+.shell * {
+  cursor: default !important;
+}
 .shell :is(.strip, .panel) {
   background: rgba(var(--bg), var(--bg-alpha));
   border: 1px solid var(--line);

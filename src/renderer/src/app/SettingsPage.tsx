@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { AccountProvider } from '../../../shared/integrations.ts';
 import { MEETING_MODES, type Settings } from '../../../shared/settings.ts';
 import { MODE_INFO } from '../components/Bar.tsx';
@@ -95,7 +95,7 @@ export function ProfileFields(props: SettingsProps) {
         name="myName"
         label="My name"
         maxLength={80}
-        placeholder="What should Bolo call you?"
+        placeholder="What should Echo call you?"
       />
       <DraftField
         {...props}
@@ -135,7 +135,7 @@ export function CalendarAccounts(props: SettingsProps) {
     setConnecting(provider);
     setError('');
     try {
-      const result = await window.bolo.connectAccount(provider);
+      const result = await window.echo.connectAccount(provider);
       if (!result.ok) setError(result.error);
       else {
         await refresh();
@@ -151,7 +151,7 @@ export function CalendarAccounts(props: SettingsProps) {
     setDisconnecting(id);
     setError('');
     try {
-      await window.bolo.disconnectAccount(id);
+      await window.echo.disconnectAccount(id);
       await refresh();
       notify('Account disconnected.');
     } catch {
@@ -164,8 +164,8 @@ export function CalendarAccounts(props: SettingsProps) {
     setWorking(true);
     setError('');
     try {
-      if (action === 'refresh') await window.bolo.refreshCalendar();
-      else await window.bolo.chooseCalendarFile(action === 'remove');
+      if (action === 'refresh') await window.echo.refreshCalendar();
+      else await window.echo.chooseCalendarFile(action === 'remove');
       await refresh();
     } catch {
       setError('Could not update your calendar. Please try again.');
@@ -280,7 +280,7 @@ export function CalendarAccounts(props: SettingsProps) {
       )}
       <p className="muted small">
         Refreshed every 10 minutes. Starting from an invite brings its title, people, and agenda
-        into Bolo.
+        into Echo.
       </p>
       <Toggle app={app} onChange={onChange} name="autoDetect">
         Notice calls in Zoom, Teams, Meet and others
@@ -295,8 +295,8 @@ export function KnowledgeFields(props: SettingsProps) {
   const choose = async (reload: boolean) => {
     setBusy(true);
     try {
-      if (reload) await window.bolo.reloadContext();
-      else await window.bolo.chooseContextDir();
+      if (reload) await window.echo.reloadContext();
+      else await window.echo.chooseContextDir();
       await refresh();
     } catch {
       notify('Your context folder could not be read. Please try again.', true);
@@ -307,7 +307,7 @@ export function KnowledgeFields(props: SettingsProps) {
   return (
     <>
       <p className="muted">
-        Your price list, stock sheet, or project notes. Bolo shows its sources when it answers.
+        Your price list, stock sheet, or project notes. Echo shows its sources when it answers.
       </p>
       <div className="folder-choice">
         <Icon name="folder" size={24} />
@@ -402,7 +402,7 @@ export function PrivacyText({ stt }: { stt: string }) {
   return (
     <div className="privacy-copy">
       <p>
-        Bolo listens to both sides of your conversation. Audio is sent to {stt} for speech-to-text.
+        Echo listens to both sides of your conversation. Audio is sent to {stt} for speech-to-text.
         The transcript goes to the AI model you configure to suggest replies and, after the meeting,
         to write minutes.
       </p>
@@ -441,14 +441,35 @@ export function SettingsPage(
   const { settings: s } = app;
   const scroll = useRef<HTMLDivElement>(null);
   const language = app.languages.find((l) => l.code === s.sttLanguage);
-  useEffect(() => {
-    const target = scroll.current?.querySelector<HTMLElement>(`#settings-${anchor}`);
+  // The section in view; follows scrolling, while `anchor` is where the user asked to go.
+  const [active, setActive] = useState(anchor);
+  const jumpedAt = useRef(0);
+  const jump = useCallback((id: string) => {
+    const target = scroll.current?.querySelector<HTMLElement>(`#settings-${id}`);
+    jumpedAt.current = Date.now();
+    setActive(id);
     target?.scrollIntoView({ block: 'start' });
     target?.focus({ preventScroll: true });
-  }, [anchor]);
+  }, []);
+  useEffect(() => jump(anchor), [anchor, jump]);
+  const onScroll = () => {
+    const box = scroll.current;
+    // A jump to a short section near the end can't bring it to the top; keep what was clicked.
+    if (!box || Date.now() - jumpedAt.current < 150) return;
+    const top = box.getBoundingClientRect().top + 48;
+    let current: string = SECTIONS[0][0];
+    if (box.scrollTop + box.clientHeight >= box.scrollHeight - 2)
+      current = SECTIONS[SECTIONS.length - 1]![0];
+    else
+      for (const [id] of SECTIONS) {
+        const el = box.querySelector<HTMLElement>(`#settings-${id}`);
+        if (el && el.getBoundingClientRect().top <= top) current = id;
+      }
+    setActive(current);
+  };
   const exportDir = async () => {
     try {
-      await window.bolo.chooseExportDir();
+      await window.echo.chooseExportDir();
       await refresh();
     } catch {
       notify('Could not choose an export folder.', true);
@@ -461,21 +482,24 @@ export function SettingsPage(
           <button
             key={id}
             aria-label={label}
-            className={anchor === id ? 'on' : ''}
-            aria-current={anchor === id ? 'location' : undefined}
-            onClick={() => onAnchor(id)}
+            className={active === id ? 'on' : ''}
+            aria-current={active === id ? 'location' : undefined}
+            onClick={() => {
+              onAnchor(id);
+              jump(id); // also when `anchor` is already this section
+            }}
           >
             {label}
           </button>
         ))}
       </nav>
-      <div className="settings-scroll" ref={scroll}>
+      <div className="settings-scroll" ref={scroll} onScroll={onScroll}>
         <section className="settings-section" id="settings-profile" tabIndex={-1}>
           <div className="profile-header">
             <Avatar name={s.myName || 'You'} />
             <div>
               <strong>{s.myName || 'Your profile'}</strong>
-              <span className="muted">Your Bolo workspace</span>
+              <span className="muted">Your Echo workspace</span>
             </div>
             <button
               onClick={() =>
@@ -487,7 +511,7 @@ export function SettingsPage(
           </div>
           <header>
             <h2>Profile</h2>
-            <p className="muted">A few things that make Bolo yours.</p>
+            <p className="muted">A few things that make Echo yours.</p>
           </header>
           <ProfileFields {...props} />
         </section>
@@ -572,7 +596,7 @@ export function SettingsPage(
               {s.exportDir || 'No export folder chosen'}
             </span>
             <button onClick={() => void exportDir()}>Choose folder</button>
-            {s.exportDir && <button onClick={() => window.bolo.openExportDir()}>Open</button>}
+            {s.exportDir && <button onClick={() => window.echo.openExportDir()}>Open</button>}
           </div>
         </section>
         <section className="settings-section" id="settings-ai" tabIndex={-1}>
@@ -588,7 +612,7 @@ export function SettingsPage(
             type="url"
             maxLength={2000}
             placeholder={app.llm.baseUrl || 'https://api.openai.com/v1'}
-            hint="Leave empty to use .env. Use HTTPS, except for this computer or your local network. Ollama: http://localhost:11434/v1."
+            hint="Leave empty to use .env. Your .env key is sent only to the .env server, never to a URL typed here. Use HTTPS, except for this computer or your local network. Ollama: http://localhost:11434/v1."
           />
           <DraftField {...props} name="llmModel" label="Model" placeholder={app.llm.model} />
           <DraftField
@@ -617,13 +641,32 @@ export function SettingsPage(
               Experimental: accuracy not tested yet. If lines look wrong, pick the call’s language.
             </p>
           )}
+          <label>
+            Write the transcript in
+            <select
+              aria-label="Write the transcript in"
+              value={s.transcriptScript}
+              onChange={(e) =>
+                void onChange({ transcriptScript: e.target.value as Settings['transcriptScript'] })
+              }
+            >
+              <option value="roman">English letters (kal tak bhej dijiye)</option>
+              <option value="native">The language’s own script (कल तक भेज दीजिए)</option>
+            </select>
+          </label>
+          {s.transcriptScript === 'roman' && (
+            <p className="muted small">
+              Your AI model rewrites each Hindi-script line, adding a moment per line. Not in
+              Silent mode.
+            </p>
+          )}
           {language?.supportsItn && (
             <Toggle {...props} name="formatNumbers">
               Write numbers and amounts as digits (₹1,200 instead of “twelve hundred”)
             </Toggle>
           )}
           <p className="muted small">Speech settings apply from the next session.</p>
-          <button className="audio-help" onClick={() => window.bolo.showOverlayPanel('settings')}>
+          <button className="audio-help" onClick={() => window.echo.showOverlayPanel('settings')}>
             Open audio settings <Icon name="arrow" size={14} />
           </button>
           <p className="muted small">

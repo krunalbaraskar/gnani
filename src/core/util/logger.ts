@@ -7,7 +7,7 @@ export interface Logger {
 export const silentLogger: Logger = { info() {}, warn() {}, error() {} };
 
 export const consoleLogger: Logger = {
-  info: (m, meta) => console.info(`[bolo] ${m}`, meta ?? ''),
-  warn: (m, meta) => console.warn(`[bolo] ${m}`, meta ?? ''),
-  error: (m, meta) => console.error(`[bolo] ${m}`, meta ?? ''),
+  info: (m, meta) => console.info(`[echo] ${m}`, meta ?? ''),
+  warn: (m, meta) => console.warn(`[echo] ${m}`, meta ?? ''),
+  error: (m, meta) => console.error(`[echo] ${m}`, meta ?? ''),
 };

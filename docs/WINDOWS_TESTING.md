@@ -1,4 +1,4 @@
-# Testing Bolo on Windows
+# Testing Echo on Windows
 
 What has been run on Windows 11 (build 26100), and what still needs a person.
 
@@ -8,8 +8,8 @@ What has been run on Windows 11 (build 26100), and what still needs a person.
 | Whole app against mock Gnani and mock AI (28 checks)     | `npm run test:e2e`                | Pass                                              |
 | Live mic + system-audio loopback into mock Gnani         | `npm run test:live`               | Pass: both streams deliver audio                  |
 | Overlay absent from a screen capture, transparent window | GDI screen capture, protection on | Absent                                            |
-| Overlay absent from a screen capture, opaque window      | same, `BOLO_OPAQUE_WINDOW=1`      | Absent                                            |
-| Overlay present with `BOLO_RECORDABLE=1`                 | same, both window modes           | Present, as intended                              |
+| Overlay absent from a screen capture, opaque window      | same, `ECHO_OPAQUE_WINDOW=1`      | Absent                                            |
+| Overlay present with `ECHO_RECORDABLE=1`                 | same, both window modes           | Present, as intended                              |
 | Real Gnani API                                           | —                                 | **Not run yet** (needs your key)                  |
 | Real AI model, and a real vision model for the screen    | —                                 | **Not run yet** (needs your key)                  |
 | Overlay hidden inside a real Zoom/Meet/Teams share       | —                                 | **Not run yet** (needs a second person or device) |
@@ -24,7 +24,7 @@ Commands are for **PowerShell** in the repository folder.
 2. `npm ci`. If Electron later reports it failed to install, run
    `node node_modules/electron/install.js` once (your npm skips install scripts).
 3. `copy .env.example .env` and fill in `GNANI_API_KEY`, plus the `LLM_*` values (see
-   the README). For an installed build, put the same `.env` in `%APPDATA%\Bolo\.env`.
+   the README). For an installed build, put the same `.env` in `%APPDATA%\Echo\.env`.
 4. Sanity checks — all must pass:
    ```powershell
    npm run lint; npm run typecheck; npm test
@@ -35,8 +35,8 @@ Commands are for **PowerShell** in the repository folder.
    npm run test:e2e; npm run test:live
    ```
 
-To reset first-run state (consent notice, settings), quit Bolo and delete
-`%APPDATA%\Bolo\settings.json`.
+To reset first-run state (consent notice, settings), quit Echo and delete
+`%APPDATA%\Echo\settings.json`.
 
 ## 1. Offline run with no keys
 
@@ -65,7 +65,7 @@ Follow [Try it with no keys](../README.md#try-it-with-no-keys) in the README. Ex
 | Click-through            | `Ctrl+Shift+M`                                                   | Amber border and a strip; clicks reach the app underneath; press again to undo              |
 | Hidden from screen share | Share your entire screen in Zoom/Meet/Teams with a second device | Bar is absent on the viewer's screen but visible to you                                     |
 | Shield                   | Hover the shield in the bar                                      | Green "Hidden from screen share" on Windows 11 build 26100 or newer; amber otherwise        |
-| Demo mode                | `BOLO_RECORDABLE=1`                                              | Amber shield reads "Visible in recordings (demo mode)"; Bolo shows up in a screen recording |
+| Demo mode                | `ECHO_RECORDABLE=1`                                              | Amber shield reads "Visible in recordings (demo mode)"; Echo shows up in a screen recording |
 
 If the bar **is** visible to the viewer in a real share, remove the entry from
 `SHARE_PROTECTION_VERIFIED` in `src/main/index.ts` so the shield stops claiming it, and
@@ -77,7 +77,7 @@ Remove the mock variables (`Remove-Item Env:GNANI_STT_URL`), and set your real k
 
 1. `npm run demo-audio` synthesises the Hinglish dealer call with Gnani's own TTS into
    `demo-audio\me.wav` and `demo-audio\them.wav` (synthetic voices, no personal data).
-2. In Bolo: Context → choose `demo-context`. Settings → Audio → Replay WAV files → **Demo**.
+2. In Echo: Context → choose `demo-context`. Settings → Audio → Replay WAV files → **Demo**.
    Settings → Speech-to-text → **Hindi**. Start, with **Play aloud** on and speed 1×.
 3. Expected: real transcripts for both sides; hover a dot for the measured latency; an
    answer for each of the three questions (stock, bulk rate, delivery), each from the
@@ -127,9 +127,9 @@ right, or "not in your files" when the fact was there.
 npm run dist:win
 ```
 
-1. Produces `release\Bolo-Setup-0.1.0.exe`. It is unsigned, so SmartScreen warns:
+1. Produces `release\Echo-Setup-0.1.0.exe`. It is unsigned, so SmartScreen warns:
    choose "More info → Run anyway".
-2. Install, launch from the Start menu, and confirm `.env` is read from `%APPDATA%\Bolo\.env`.
+2. Install, launch from the Start menu, and confirm `.env` is read from `%APPDATA%\Echo\.env`.
 3. Uninstall from Settings → Apps; it should remove cleanly.
 
 ## Gnani verification checklist
@@ -148,7 +148,7 @@ Gnani changes the API:
 - [x] **Auto-detect**: comma lists are refused; `indic-auto` is accepted.
 - [ ] **Auto-detect accuracy**: speak two languages with `indic-auto` and compare with the
       single-language setting.
-- [x] **End of stream**: closing loses an unfinished sentence; Bolo now sends silence first.
+- [x] **End of stream**: closing loses an unfinished sentence; Echo now sends silence first.
 - [x] **Silence/keep-alive**: the server closes after 60 s without speech, pings or not.
 - [x] **TTS demo script**: `npm run demo-audio` works.
 
@@ -160,9 +160,9 @@ Gnani changes the API:
 - **No system audio / "Could not capture system audio"**: some audio drivers don't
   support WASAPI loopback. Update the driver, check the default output device, or try
   another playback device. Mic-only sessions still work.
-- **Transparent window looks wrong**: set `BOLO_OPAQUE_WINDOW=1` in `.env`.
-- **A hotkey does nothing**: another app may own it; Bolo shows a notice at startup if
+- **Transparent window looks wrong**: set `ECHO_OPAQUE_WINDOW=1` in `.env`.
+- **A hotkey does nothing**: another app may own it; Echo shows a notice at startup if
   registration failed. Change `HOTKEYS` in `src/main/index.ts`.
 - **A CSV is listed as "not UTF-8"**: in Excel use Save As → **CSV UTF-8**.
 - **"GNANI_API_KEY is not set"**: `.env` must be in the folder you run `npm run dev`
-  from, or in `%APPDATA%\Bolo\` for the installed app. Restart Bolo after editing it.
+  from, or in `%APPDATA%\Echo\` for the installed app. Restart Echo after editing it.

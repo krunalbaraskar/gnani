@@ -175,6 +175,8 @@ describe('meetingNow', () => {
     expect(startsInLabel(180_000)).toBe('starts in 3 min');
     expect(startsInLabel(-20_000)).toBe('starting now');
     expect(startsInLabel(-5 * 60_000)).toBe('started 5 min ago');
+    expect(startsInLabel(1303 * 60_000)).toBe('starts in 21 h 43 min');
+    expect(startsInLabel(120 * 60_000)).toBe('starts in 2 h');
   });
 });
 

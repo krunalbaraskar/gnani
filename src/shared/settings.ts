@@ -1,9 +1,11 @@
 /** User settings. Persisted as JSON by the main process. Contains no secrets. */
 
 export type OutputLanguage = 'english' | 'same' | 'hinglish';
+/** Script of Indian-language transcript lines (see Settings.transcriptScript). */
+export type TranscriptScript = 'roman' | 'native';
 export type AudioMode = 'live' | 'file';
 /**
- * How much Bolo does during a meeting. silent = transcribe only (answers only when asked) ·
+ * How much Echo does during a meeting. silent = transcribe only (answers only when asked) ·
  * assist = answers when asked, meanings under mixed-language lines · active = also answers
  * their questions on its own.
  */
@@ -31,12 +33,17 @@ export interface Settings {
   calendarUrl: string;
   /** An .ics file instead of a link. Set only via the file dialog. */
   calendarFile: string;
-  /** Notice calls in other apps (Zoom, Teams, Meet…) and offer to start Bolo. */
+  /** Notice calls in other apps (Zoom, Teams, Meet…) and offer to start Echo. */
   autoDetect: boolean;
   /** The main window's first-run setup was finished or skipped. */
   onboarded: boolean;
   /** Gnani language code (see GNANI_LANGUAGES). */
   sttLanguage: string;
+  /**
+   * How Indian-language lines are written: "roman" rewrites them in English letters
+   * (Hinglish as people type it) with the AI model; "native" keeps the original script.
+   */
+  transcriptScript: TranscriptScript;
   /** Numbers, currency and dates as digits (Gnani ITN; Hindi and English only). */
   formatNumbers: boolean;
   outputLanguage: OutputLanguage;
@@ -95,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoDetect: true,
   onboarded: false,
   sttLanguage: 'hi-IN',
+  transcriptScript: 'roman',
   formatNumbers: false,
   outputLanguage: 'same',
   contextNote: '',
@@ -121,6 +129,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const OUTPUT_LANGUAGES: readonly OutputLanguage[] = ['english', 'same', 'hinglish'];
+const TRANSCRIPT_SCRIPTS: readonly TranscriptScript[] = ['roman', 'native'];
 const AUDIO_MODES: readonly AudioMode[] = ['live', 'file'];
 
 function pick<T>(value: unknown, fallback: T, valid: (v: unknown) => boolean): T {
@@ -185,6 +194,9 @@ export function sanitizeSettings(input: unknown, base: Settings = DEFAULT_SETTIN
       d.sttLanguage,
       // One locale or indic-auto: Gnani refuses lists and en-hi-in-cm, so old saved values reset.
       (v) => isString(v) && /^(?:[a-z]{2}-[A-Z]{2}|indic-auto)$/.test(v as string),
+    ),
+    transcriptScript: pick(i['transcriptScript'], d.transcriptScript, (v) =>
+      TRANSCRIPT_SCRIPTS.includes(v as TranscriptScript),
     ),
     formatNumbers: pick(i['formatNumbers'], d.formatNumbers, isBool),
     outputLanguage: pick(i['outputLanguage'], d.outputLanguage, (v) =>

@@ -129,7 +129,7 @@ describe('guessSpeakers', () => {
 describe('speakers in the library', () => {
   function service(reply: string) {
     return new MeetingService({
-      store: new MeetingStore(mkdtempSync(join(tmpdir(), 'bolo-speakers-'))),
+      store: new MeetingStore(mkdtempSync(join(tmpdir(), 'echo-speakers-'))),
       llm: () => fakeLlm(() => reply),
       writer: () => ({ myName: 'Krunal', language: 'English' }),
       emit: () => {},

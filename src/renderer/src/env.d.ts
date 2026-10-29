@@ -1,7 +1,7 @@
-import type { BoloApi } from '../../preload/api.ts';
+import type { EchoApi } from '../../preload/api.ts';
 
 declare global {
   interface Window {
-    bolo: BoloApi;
+    echo: EchoApi;
   }
 }

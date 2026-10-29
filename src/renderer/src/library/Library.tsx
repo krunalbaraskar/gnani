@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CalendarEventView } from '../../../shared/calendar.ts';
 import { markdownToHtml } from '../../../shared/markdown.ts';
 import type {
   MeetingAnswerView,
@@ -67,16 +68,28 @@ interface AskState {
 
 let asks = 0;
 
+/** "Today · 11:00 pm", "Tomorrow · All day". */
+function upcomingWhen(e: CalendarEventView): string {
+  const tomorrow = new Date();
+  tomorrow.setHours(24, 0, 0, 0);
+  const day = e.start >= tomorrow.getTime() ? 'Tomorrow' : 'Today';
+  const time = e.allDay
+    ? 'All day'
+    : new Date(e.start).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
 export function Library({
   meetingId,
   onSelect,
-  sidebarLinks,
   running = false,
+  upcoming = [],
 }: {
   meetingId?: string;
   onSelect?: (id: string) => void;
-  sidebarLinks?: ReactNode;
   running?: boolean;
+  /** Calendar meetings not over yet, listed above the recorded ones. */
+  upcoming?: readonly CalendarEventView[];
 }) {
   const [list, setList] = useState<MeetingSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -106,7 +119,7 @@ export function Library({
   const refreshList = useCallback(async () => {
     const query = queryRef.current;
     try {
-      const next = await window.bolo.listMeetings(query);
+      const next = await window.echo.listMeetings(query);
       if (query !== queryRef.current) return;
       setList(next);
       setLoaded(true);
@@ -116,7 +129,7 @@ export function Library({
   }, []);
   const refreshDetail = useCallback(async (id: string | null) => {
     try {
-      const next = id ? await window.bolo.getMeeting(id) : null;
+      const next = id ? await window.echo.getMeeting(id) : null;
       if (id === selectedRef.current) setDetail(next);
     } catch {
       setToast({ text: 'Could not open this meeting. Please try again.', error: true });
@@ -144,7 +157,7 @@ export function Library({
 
   useEffect(
     () =>
-      window.bolo.onEvent((e) => {
+      window.echo.onEvent((e) => {
         switch (e.type) {
           case 'meeting-updated':
             void refreshList();
@@ -184,7 +197,7 @@ export function Library({
     const askId = ++asks;
     setAsk({ askId, question, text: '' });
     try {
-      const r = await window.bolo.askMeetings(question, askId);
+      const r = await window.echo.askMeetings(question, askId);
       setAsk((a) =>
         a?.askId !== askId ? a : 'error' in r ? { ...a, error: r.error } : { ...a, answer: r },
       );
@@ -225,14 +238,13 @@ export function Library({
         <Icon name={browsing ? 'close' : 'threads'} size={20} />
       </button>
       <aside className="lib-side">
-        <div className="library-sidebar-top">{sidebarLinks}</div>
         <div className="sidebar-section">
           <span>Meetings</span>
           <button
             className="icon"
             aria-label="Start another meeting"
             disabled={running}
-            onClick={() => window.bolo.requestStart()}
+            onClick={() => window.echo.requestStart()}
           >
             <Icon name="plus" />
           </button>
@@ -262,11 +274,50 @@ export function Library({
           </button>
         )}
         <nav className="lib-list" aria-label="Meetings">
+          {!listQuery && upcoming.length > 0 && (
+            <section>
+              <h3>Upcoming</h3>
+              {upcoming.map((e) => (
+                <div className="lib-item lib-upcoming" key={e.key}>
+                  <span className="lib-item-title" title={e.title}>
+                    <Icon name="calendar" />
+                    {e.title}
+                  </span>
+                  <span className="lib-item-meta">
+                    {upcomingWhen(e)}
+                    {!e.allDay && (
+                      <span className="lib-upcoming-actions">
+                        <button
+                          className="small"
+                          disabled={running}
+                          onClick={() => window.echo.requestStart(e.key)}
+                          aria-label={`Start ${e.title} with Echo`}
+                        >
+                          <Icon name="play" size={11} /> Start
+                        </button>
+                        {e.joinUrl && (
+                          <button
+                            className="small ghost"
+                            onClick={() => window.echo.openJoinLink(e.key)}
+                            aria-label={`Join ${e.title}`}
+                          >
+                            Join
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </section>
+          )}
           {loaded && list.length === 0 && (
             <p className="muted lib-empty-list">
               {listQuery
                 ? 'No meeting mentions all of that. Press Enter to ask your meetings instead.'
-                : 'No meetings yet.'}
+                : upcoming.length
+                  ? 'No recorded meetings yet.'
+                  : 'No meetings yet.'}
             </p>
           )}
           {groups.map((g) => (
@@ -325,7 +376,7 @@ export function Library({
               {loaded && list.length === 0 && !query ? 'Your meetings live here' : 'Pick a meeting'}
             </h2>
             <p className="muted">
-              When a meeting ends, Bolo saves the transcript on this computer and writes the
+              When a meeting ends, Echo saves the transcript on this computer and writes the
               minutes: summary, decisions and action items. Start one from the bar at the top of
               your screen.
             </p>
@@ -395,7 +446,7 @@ function AskPane({
           )}
         </section>
         <p className="muted small">
-          Bolo sends the parts of your meetings that match the question to your AI model, and checks
+          Echo sends the parts of your meetings that match the question to your AI model, and checks
           every figure in the answer against them.
         </p>
       </div>
@@ -421,7 +472,7 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
   const saveTitle = async () => {
     const t = title.trim();
     if (!t || t === m.title) return setTitle(m.title);
-    const next = await window.bolo.updateMeeting(m.id, { title: t });
+    const next = await window.echo.updateMeeting(m.id, { title: t });
     if (next) onChanged(next);
   };
 
@@ -502,7 +553,7 @@ function MeetingView({ m, progress, tab, onTab, onChanged, toast }: ViewProps) {
           )}
           <button
             className="ghost small danger"
-            onClick={() => void window.bolo.deleteMeeting(m.id)}
+            onClick={() => void window.echo.deleteMeeting(m.id)}
             title="Delete this meeting from this computer"
           >
             <Icon name="trash" size={14} /> Delete
@@ -571,7 +622,7 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
               : 'Writing the minutes…'}
           </span>
           <span className="spacer" />
-          <button className="ghost small" onClick={() => window.bolo.cancelMinutes(m.id)}>
+          <button className="ghost small" onClick={() => window.echo.cancelMinutes(m.id)}>
             Cancel
           </button>
         </div>
@@ -588,11 +639,11 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
         ) : (
           <p className="muted">No minutes for this meeting yet.</p>
         )}
-        <button className="primary" onClick={() => window.bolo.writeMinutes(m.id)}>
+        <button className="primary" onClick={() => window.echo.writeMinutes(m.id)}>
           <Icon name="sparkle" size={14} /> {m.minutesError ? 'Try again' : 'Write minutes'}
         </button>
         <p className="muted small">
-          Bolo sends the transcript and your notes to your AI model and writes a summary, key
+          Echo sends the transcript and your notes to your AI model and writes a summary, key
           points, decisions, action items and open questions.
         </p>
       </div>
@@ -600,12 +651,12 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
   }
 
   const save = async () => {
-    const next = await window.bolo.updateMeeting(m.id, { minutes: draft });
+    const next = await window.echo.updateMeeting(m.id, { minutes: draft });
     if (next) onChanged(next);
     setEditing(false);
   };
   const exportAs = async (format: 'md' | 'pdf') => {
-    const r = await window.bolo.exportMeeting(m.id, format);
+    const r = await window.echo.exportMeeting(m.id, format);
     if (r && 'path' in r) toast(`Saved ${r.path}`);
     else if (r) toast(r.error, true);
   };
@@ -617,10 +668,10 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
         Pinned in this meeting
       </div>
       <div className="pinned-author">
-        <Avatar name="Bolo" />
+        <Avatar name="Echo" />
         <div>
           <div className="message-header">
-            <strong>Bolo</strong>
+            <strong>Echo</strong>
             <span className="app-tag">APP</span>
             <time className="when">{messageTime(minutes.generatedAt)}</time>
           </div>
@@ -652,14 +703,14 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
             <button
               className="ghost small"
               onClick={() =>
-                void window.bolo
+                void window.echo
                   .copyMinutes(m.id)
                   .then((ok) => ok && toast('Copied. Paste into an email or chat.'))
               }
             >
               <Icon name="copy" size={14} /> Copy
             </button>
-            <button className="ghost small" onClick={() => window.bolo.emailMinutes(m.id)}>
+            <button className="ghost small" onClick={() => window.echo.emailMinutes(m.id)}>
               <Icon name="mail" size={14} /> Email
             </button>
             <button className="ghost small" onClick={() => void exportAs('pdf')}>
@@ -678,7 +729,7 @@ function MinutesPane({ m, progress, onChanged, toast }: Omit<ViewProps, 'tab' | 
               }
               onClick={() => {
                 if (!minutes.edited || window.confirm('Replace your edited minutes?'))
-                  window.bolo.writeMinutes(m.id);
+                  window.echo.writeMinutes(m.id);
               }}
             >
               <Icon name="sparkle" size={14} /> Rewrite
@@ -735,7 +786,7 @@ function SpeakerPicker({
   const guessed = m.speakers.guessed?.includes(segId);
   const save = async (name: string) => {
     setTyping(false);
-    const next = await window.bolo.updateMeeting(m.id, { lineSpeaker: { id: segId, name } });
+    const next = await window.echo.updateMeeting(m.id, { lineSpeaker: { id: segId, name } });
     if (next) onChanged(next);
   };
   if (typing)
@@ -757,7 +808,7 @@ function SpeakerPicker({
     <select
       className={`who-pick ${guessed ? 'guessed' : ''}`}
       value={current}
-      title={guessed ? 'Guessed by Bolo. Pick a name to confirm or change it.' : 'Who said this'}
+      title={guessed ? 'Guessed by Echo. Pick a name to confirm or change it.' : 'Who said this'}
       aria-label="Who said this"
       onChange={(e) => {
         const v = e.target.value;
@@ -801,12 +852,12 @@ function TranscriptPane({
   );
   const saveThem = async () => {
     if (them.trim() === (m.speakers.them ?? '')) return;
-    const next = await window.bolo.updateMeeting(m.id, { themName: them });
+    const next = await window.echo.updateMeeting(m.id, { themName: them });
     if (next) onChanged(next);
   };
   const guess = async () => {
     setGuessing(true);
-    const r = await window.bolo.guessSpeakers(m.id);
+    const r = await window.echo.guessSpeakers(m.id);
     setGuessing(false);
     if ('error' in r) toast(r.error, true);
     else
@@ -903,7 +954,7 @@ function NotesPane({ m, onChanged }: { m: MeetingDetail; onChanged: (m: MeetingD
   useEffect(() => setNotes(m.notes), [m.notes]);
   const save = async () => {
     if (notes === m.notes) return;
-    const next = await window.bolo.updateMeeting(m.id, { notes });
+    const next = await window.echo.updateMeeting(m.id, { notes });
     if (next) onChanged(next);
     setSaved(true);
   };
@@ -932,7 +983,7 @@ function NotesPane({ m, onChanged }: { m: MeetingDetail; onChanged: (m: MeetingD
           <p>{m.agenda}</p>
         </>
       )}
-      <h3>What Bolo answered during the meeting</h3>
+      <h3>What Echo answered during the meeting</h3>
       {answers.length === 0 ? (
         <p className="muted">No answers in this meeting.</p>
       ) : (

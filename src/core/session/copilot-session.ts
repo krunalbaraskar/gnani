@@ -6,6 +6,7 @@ import { SPEAKERS, type Speaker, type TranscriptSegment } from '../../shared/tra
 import type { Settings } from '../../shared/settings.ts';
 import { selectChunks, type LoadedContext } from '../context/context.ts';
 import { GlossEngine } from '../gloss/engine.ts';
+import { hasIndicScript, romanize } from '../gloss/romanize.ts';
 import type { LlmProvider } from '../llm/types.ts';
 import { SuggestionEngine, type Suggestion, type SuggestRequest } from '../suggest/engine.ts';
 import { CATCHUP_MINUTES } from '../suggest/prompt.ts';
@@ -76,6 +77,9 @@ export class CopilotSession {
   private readonly deps: CopilotSessionDeps;
   private readonly engine: SuggestionEngine;
   private readonly gloss: GlossEngine;
+  /** Final lines still being handled (see onTranscript). */
+  private finals: Promise<void> = Promise.resolve();
+  private pending = 0;
   private readonly now: () => number;
   private readonly log: Logger;
   private streams = new Map<Speaker, SttStream>();
@@ -229,6 +233,7 @@ export class CopilotSession {
     this.running = false;
     // allSettled: a stream that fails to close must not skip the cancels below or lose the record.
     await Promise.allSettled([...this.streams.values()].map((s) => s.close()));
+    await this.finals; // lines that arrived while closing
     this.streams.clear();
     this.engine.cancel();
     this.gloss.stop();
@@ -251,11 +256,39 @@ export class CopilotSession {
       this.deps.events.onPartial(t.speaker, t.text);
       return;
     }
+    const text = t.text.trim();
+    const s = this.deps.settings();
+    // Indian-script lines in English letters (settings.transcriptScript); silent mode makes
+    // no AI request the user did not ask for.
+    const rewrite = s.transcriptScript === 'roman' && s.mode !== 'silent' && hasIndicScript(text);
+    if (!rewrite && !this.pending) {
+      this.onFinal(t, text);
+      return;
+    }
+    // Queued behind any line still being rewritten, so lines keep their order.
+    this.pending++;
+    this.finals = this.finals
+      .then(async () => this.onFinal(t, rewrite ? await this.roman(text) : text))
+      .catch((err: unknown) =>
+        this.log.warn('transcript line failed', { error: (err as Error).message }),
+      )
+      .finally(() => this.pending--);
+  }
+
+  private async roman(text: string): Promise<string> {
+    try {
+      return await romanize(this.deps.llm(), text);
+    } catch {
+      return text; // no AI model set up: keep the original script
+    }
+  }
+
+  private onFinal(t: SttTranscript, text: string): void {
     const settings = this.deps.settings();
     const seg: TranscriptSegment = {
       id: `${t.speaker}:${t.segmentId}`,
       speaker: t.speaker,
-      text: t.text.trim(),
+      text,
       at: t.receivedAt,
       audioDurationMs: t.audioDurationMs,
       serverLatencyMs: t.serverLatencyMs,

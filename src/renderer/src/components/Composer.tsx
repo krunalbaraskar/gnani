@@ -34,10 +34,10 @@ export function Composer({
       <input
         ref={inputRef}
         type="text"
-        aria-label="Ask Bolo"
-        placeholder="Message Bolo…"
+        aria-label="Ask Echo"
+        placeholder="Message Echo…"
         title={
-          clickThrough ? 'Ctrl+Shift+M to use Bolo' : !running ? 'Start a call to ask' : undefined
+          clickThrough ? 'Ctrl+Shift+M to use Echo' : !running ? 'Start a call to ask' : undefined
         }
         value={question}
         onChange={(event) => onQuestion(event.target.value)}
@@ -66,7 +66,7 @@ export function Composer({
           type="button"
           className="ghost small catch-up"
           disabled={!canAsk}
-          onClick={() => window.bolo.catchUp()}
+          onClick={() => window.echo.catchUp()}
           title="What was said in the last 10 minutes, and anything asked of you (Ctrl+Shift+U)"
         >
           <Icon name="history" size={15} /> Catch me up

@@ -45,7 +45,7 @@ export function Line({
       {them && (
         <button
           className="small line-action"
-          onClick={() => window.bolo.requestMeaning(s.id)}
+          onClick={() => window.echo.requestMeaning(s.id)}
           aria-label={`Explain: ${s.text}`}
           title="Explain this line"
         >

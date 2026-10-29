@@ -9,7 +9,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from 'electron';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MeetingService } from '../core/meetings/service.ts';
@@ -20,9 +20,10 @@ import { consoleLogger } from '../core/util/logger.ts';
 import {
   IPC,
   type AppState,
-  type BoloEvent,
+  type EchoEvent,
   type AppSection,
   type ConnectResult,
+  type NewMeetingResult,
   type ContextView,
   type ExportResult,
   type ShareProtection,
@@ -56,6 +57,7 @@ import { installMediaHandlers } from './permissions.ts';
 import { captureScreen } from './screen-capture.ts';
 import { languageName, llmConfig, SessionController } from './session-controller.ts';
 import { SettingsStore } from './settings-store.ts';
+import { TodoStore } from './todo-store.ts';
 
 const HOTKEYS = {
   suggest: 'CommandOrControl+Shift+Space',
@@ -73,7 +75,7 @@ const HOTKEYS = {
  */
 const SHARE_PROTECTION_VERIFIED: { platform: NodeJS.Platform; minBuild: number }[] = [
   // Windows 11 build 26100, 2026-10-09: absent from a GDI screen capture with the transparent
-  // window and with BOLO_OPAQUE_WINDOW=1; present in both with BOLO_RECORDABLE=1.
+  // window and with ECHO_OPAQUE_WINDOW=1; present in both with ECHO_RECORDABLE=1.
   { platform: 'win32', minBuild: 26100 },
 ];
 
@@ -92,13 +94,23 @@ let overlay: BrowserWindow | null = null;
 let library: BrowserWindow | null = null;
 let clickThrough = false;
 
-// Pin the name and settings folder (%APPDATA%\Bolo) however the app is launched;
+// Pin the name and settings folder (%APPDATA%\Echo) however the app is launched;
 // otherwise `electron <script>` would use "Electron".
-app.setName('Bolo');
-// BOLO_USER_DATA lets the end-to-end test use a throwaway folder: on Windows the appData
+app.setName('Echo');
+// ECHO_USER_DATA lets the end-to-end test use a throwaway folder: on Windows the appData
 // path does not follow the APPDATA environment variable.
-const testUserData = app.isPackaged ? undefined : process.env['BOLO_USER_DATA'];
-app.setPath('userData', testUserData || join(app.getPath('appData'), 'Bolo'));
+const testUserData = app.isPackaged ? undefined : process.env['ECHO_USER_DATA'];
+const userData = join(app.getPath('appData'), 'Echo');
+// The app was called Bolo: carry its folder (settings, accounts, meetings) over once.
+const oldUserData = join(app.getPath('appData'), 'Bolo');
+if (!testUserData && !existsSync(userData) && existsSync(oldUserData)) {
+  try {
+    renameSync(oldUserData, userData);
+  } catch (err) {
+    log.warn('could not move the old Bolo folder', { error: (err as Error).message });
+  }
+}
+app.setPath('userData', testUserData || userData);
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -109,7 +121,8 @@ app.on('second-instance', () => {
 void app.whenReady().then(() => {
   const env = loadEnv();
   const settings = new SettingsStore();
-  const emit = (e: BoloEvent) => {
+  const todos = new TodoStore();
+  const emit = (e: EchoEvent) => {
     // A question naming the user brings a hidden overlay back, without taking focus.
     if (e.type === 'mention' && e.mention.asked && overlay && !overlay.isVisible())
       overlay.showInactive();
@@ -180,7 +193,7 @@ void app.whenReady().then(() => {
     log,
     onChange: (meeting) => {
       emit({ type: 'detected', meeting });
-      // The other app let go of the microphone while Bolo is still listening.
+      // The other app let go of the microphone while Echo is still listening.
       if (!meeting && controller.running) {
         emit({
           type: 'notice',
@@ -324,7 +337,7 @@ void app.whenReady().then(() => {
       return { ok: false, error: 'Unknown calendar provider.' };
     const r = await accounts.connect(provider);
     if (r.ok) void calendar.refresh();
-    // The browser had the focus; bring Bolo back.
+    // The browser had the focus; bring Echo back.
     if (library && !library.isDestroyed()) library.focus();
     return r;
   });
@@ -332,6 +345,20 @@ void app.whenReady().then(() => {
     if (typeof id !== 'string') return;
     await accounts.disconnect(id);
     void calendar.refresh();
+  });
+  // New Google Meet / Teams meeting: open it, copy the link, and start listening.
+  handle(IPC.createMeeting, async (provider: unknown): Promise<NewMeetingResult> => {
+    if (provider !== 'google' && provider !== 'microsoft')
+      return { ok: false, error: 'Unknown provider.' };
+    const r = await accounts.createMeeting(provider);
+    if (!r.ok) return r;
+    clipboard.writeText(r.url);
+    void shell.openExternal(r.url);
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.showInactive();
+      overlay.webContents.send(IPC.event, { type: 'start-request' } as EchoEvent);
+    }
+    return r;
   });
   ipcMain.on(IPC.openJoinLink, (e, key: unknown) => {
     const url = trusted(e) && typeof key === 'string' ? calendar.find(key)?.joinUrl : undefined;
@@ -375,7 +402,7 @@ void app.whenReady().then(() => {
 
   async function chooseDir(): Promise<string | null> {
     const opts = {
-      title: 'Folder for Bolo session exports',
+      title: 'Folder for Echo session exports',
       properties: ['openDirectory' as const, 'createDirectory' as const],
     };
     const r = overlay
@@ -389,7 +416,7 @@ void app.whenReady().then(() => {
 
   handle(IPC.chooseContextDir, async (): Promise<ContextView> => {
     const opts = {
-      title: 'Folder with the files Bolo should answer from',
+      title: 'Folder with the files Echo should answer from',
       properties: ['openDirectory' as const],
     };
     const r = overlay
@@ -443,9 +470,9 @@ void app.whenReady().then(() => {
         type: 'navigate',
         section,
         meetingId: id,
-      } as BoloEvent);
+      } as EchoEvent);
       // Older renderers listen for this one.
-      if (id) library.webContents.send(IPC.event, { type: 'open-meeting', id } as BoloEvent);
+      if (id) library.webContents.send(IPC.event, { type: 'open-meeting', id } as EchoEvent);
       if (library.isMinimized()) library.restore();
       library.show();
       library.focus();
@@ -464,13 +491,13 @@ void app.whenReady().then(() => {
     overlay.webContents.send(IPC.event, {
       type: 'start-request',
       eventKey: typeof eventKey === 'string' ? eventKey : undefined,
-    } as BoloEvent);
+    } as EchoEvent);
   });
   ipcMain.on(IPC.showOverlayPanel, (e, panel: unknown) => {
     const tabs = ['live', 'transcript', 'context', 'settings'];
     if (!trusted(e) || !overlay || overlay.isDestroyed() || !tabs.includes(panel as string)) return;
     overlay.showInactive();
-    overlay.webContents.send(IPC.event, { type: 'overlay-panel', panel } as BoloEvent);
+    overlay.webContents.send(IPC.event, { type: 'overlay-panel', panel } as EchoEvent);
   });
   ipcMain.on(IPC.openApp, (e, section: unknown) => {
     if (trusted(e))
@@ -482,6 +509,12 @@ void app.whenReady().then(() => {
       ? meetings.setActionItem(id, index as number, done)
       : false,
   );
+  handle(IPC.listTodos, () => todos.list());
+  handle(IPC.addTodo, (text: unknown) => (typeof text === 'string' ? todos.add(text) : null));
+  handle(IPC.setTodoDone, (id: unknown, done: unknown) =>
+    typeof id === 'string' && typeof done === 'boolean' ? todos.setDone(id, done) : false,
+  );
+  handle(IPC.deleteTodo, (id: unknown) => (typeof id === 'string' ? todos.remove(id) : false));
   handle(IPC.listMeetings, (query: unknown) =>
     meetings.list(typeof query === 'string' ? query.slice(0, 200) : ''),
   );
@@ -678,7 +711,7 @@ void app.whenReady().then(() => {
   register(HOTKEYS.catchUp, () => controller.catchUp());
 
   // The main window opens with the app (first run: its setup steps), unless a test asks not to.
-  if (!process.env['BOLO_NO_MAIN_WINDOW'] || app.isPackaged) openApp('home');
+  if (!process.env['ECHO_NO_MAIN_WINDOW'] || app.isPackaged) openApp('home');
 
   // Quitting mid-call still saves the transcript (if an export folder is set).
   let quitting = false;

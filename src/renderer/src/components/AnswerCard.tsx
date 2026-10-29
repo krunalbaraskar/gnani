@@ -55,10 +55,10 @@ export function AnswerCard({
   const tone = !s || streaming || s.error ? 'neutral' : (s.verdict ?? 'neutral');
   return (
     <article className="bot-message">
-      <Avatar name="Bolo" />
+      <Avatar name="Echo" />
       <div className="message-body">
         <header className="message-header">
-          <strong>Bolo</strong>
+          <strong>Echo</strong>
           <span className="app-tag">APP</span>
           {s && (
             <time className="when" dateTime={new Date(s.startedAt).toISOString()}>
@@ -81,7 +81,7 @@ export function AnswerCard({
           {s?.asked && <p className="asked">You asked: {s.asked}</p>}
           {!s && (
             <p className="hint">
-              Bolo answers when they ask a question. Ctrl+Shift+Space answers now; Ctrl+Alt+Space
+              Echo answers when they ask a question. Ctrl+Shift+Space answers now; Ctrl+Alt+Space
               reads your screen; Ctrl+Shift+U catches you up.
             </p>
           )}

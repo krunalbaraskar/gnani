@@ -1,7 +1,7 @@
 /**
  * Generates demo-audio/me.wav and demo-audio/them.wav: a short, fictional Hinglish
  * sales call synthesised with Gnani's TTS. No real people or personal data — the names,
- * company and numbers are made up. Lets you demo and test Bolo with real speech
+ * company and numbers are made up. Lets you demo and test Echo with real speech
  * without recording anyone.
  *
  *   npm run demo-audio              # needs GNANI_API_KEY (env or .env)
@@ -115,5 +115,5 @@ writeFileSync(join(dir, 'me.wav'), encodeWav16([tracks.me], RATE));
 writeFileSync(join(dir, 'them.wav'), encodeWav16([tracks.them], RATE));
 writeFileSync(join(dir, 'script.json'), JSON.stringify(SCRIPT, null, 2));
 console.info(
-  `Wrote ${join(dir, 'me.wav')} and them.wav (${(tracks.me.length / RATE).toFixed(1)} s). Click "Demo" in Bolo.`,
+  `Wrote ${join(dir, 'me.wav')} and them.wav (${(tracks.me.length / RATE).toFixed(1)} s). Click "Demo" in Echo.`,
 );

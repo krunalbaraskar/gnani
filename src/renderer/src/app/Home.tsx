@@ -52,8 +52,8 @@ export function Home({
     const request = ++revision.current;
     try {
       const [items, recent] = await Promise.all([
-        window.bolo.listActionItems(),
-        window.bolo.listMeetings(''),
+        window.echo.listActionItems(),
+        window.echo.listMeetings(''),
       ]);
       if (request !== revision.current) return;
       setActions(
@@ -67,7 +67,7 @@ export function Home({
       setError(false);
       const people = await Promise.all(
         recent.slice(0, 6).map(async (m) => {
-          const detail = await window.bolo.getMeeting(m.id).catch(() => null);
+          const detail = await window.echo.getMeeting(m.id).catch(() => null);
           return [m.id, detail?.attendees ?? []] as const;
         }),
       );
@@ -78,7 +78,7 @@ export function Home({
   }, []);
   useEffect(() => {
     void refresh();
-    const off = window.bolo.onEvent((e) => {
+    const off = window.echo.onEvent((e) => {
       if (e.type === 'meeting-updated' || e.type === 'meeting-deleted') void refresh();
     });
     const timer = setInterval(() => setNow(Date.now()), 30000);
@@ -99,7 +99,7 @@ export function Home({
     );
     let ok = false;
     try {
-      ok = await window.bolo.toggleActionItem(item.meetingId, item.index, done);
+      ok = await window.echo.toggleActionItem(item.meetingId, item.index, done);
     } catch {
       /* Revert below, including IPC failures. */
     }
@@ -185,21 +185,23 @@ export function Home({
               <div className="event-people">
                 <Avatars people={next.attendees} />
                 <span className="muted small">
-                  {next.attendees.length
-                    ? `${next.attendees.length} people invited`
-                    : 'A moment to get ready'}
+                  {next.attendees.length === 1
+                    ? '1 person invited'
+                    : next.attendees.length
+                      ? `${next.attendees.length} people invited`
+                      : 'A moment to get ready'}
                 </span>
               </div>
               <div className="card-actions">
                 <button
                   className="primary"
                   disabled={app.sessionRunning}
-                  onClick={() => window.bolo.requestStart(next.key)}
+                  onClick={() => window.echo.requestStart(next.key)}
                 >
-                  <Icon name="play" size={12} /> Start with Bolo
+                  <Icon name="play" size={12} /> Start with Echo
                 </button>
                 {next.joinUrl && (
-                  <button onClick={() => window.bolo.openJoinLink(next.key)}>
+                  <button onClick={() => window.echo.openJoinLink(next.key)}>
                     Join <Icon name="arrow" size={14} />
                   </button>
                 )}
@@ -209,13 +211,13 @@ export function Home({
             <>
               <span className="source-badge">Call detected</span>
               <h4 className="event-title">{app.detected.app} call in progress</h4>
-              <p className="muted">Bring Bolo along to help you stay in the conversation.</p>
+              <p className="muted">Bring Echo along to help you stay in the conversation.</p>
               <button
                 className="primary"
                 disabled={app.sessionRunning}
-                onClick={() => window.bolo.requestStart()}
+                onClick={() => window.echo.requestStart()}
               >
-                Start with Bolo
+                Start with Echo
               </button>
             </>
           ) : (
@@ -224,11 +226,11 @@ export function Home({
                 <Icon name="calendar" size={26} />
               </span>
               <h4>A little breathing room</h4>
-              <p className="muted">No meeting coming up. Bolo is here when you need it.</p>
+              <p className="muted">No meeting coming up. Echo is here when you need it.</p>
               <button
                 aria-label="Start an unscheduled meeting"
                 disabled={app.sessionRunning}
-                onClick={() => window.bolo.requestStart()}
+                onClick={() => window.echo.requestStart()}
               >
                 Start a meeting
               </button>
@@ -279,14 +281,15 @@ export function Home({
                   <div>
                     <strong>{e.title}</strong>
                     <span className="muted small">
-                      {e.attendees.length} people <Source event={e} />
+                      {e.attendees.length} {e.attendees.length === 1 ? 'person' : 'people'}{' '}
+                      <Source event={e} />
                     </span>
                   </div>
                   {!e.allDay && e.start - now <= 3600000 && (
                     <button
                       className="small"
                       disabled={app.sessionRunning}
-                      onClick={() => window.bolo.requestStart(e.key)}
+                      onClick={() => window.echo.requestStart(e.key)}
                     >
                       Start
                     </button>

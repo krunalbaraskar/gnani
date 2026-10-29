@@ -1,7 +1,7 @@
-/** Renderer interaction checks with a deterministic window.bolo contract.
+/** Renderer interaction checks with a deterministic window.echo contract.
  * Run after npm run build: node scripts/e2e-ui.mjs
  * Uses the same optional Playwright installation as e2e-electron.mjs.
- * All fixtures and Electron data live in a temporary folder, never your Bolo profile.
+ * All fixtures and Electron data live in a temporary folder, never your Echo profile.
  */
 import { _electron as electron } from 'playwright';
 import { strict as assert } from 'node:assert';
@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import { CONSENT_VERSION, DEFAULT_SETTINGS } from '../src/shared/settings.ts';
 
 const repo = resolve(import.meta.dirname, '..');
-const temp = mkdtempSync(join(tmpdir(), 'bolo-ui-'));
+const temp = mkdtempSync(join(tmpdir(), 'echo-ui-'));
 const shots = join(repo, 'test-results', 'ui');
 mkdirSync(shots, { recursive: true });
 const startedAt = Date.now() - 3600000;
@@ -98,7 +98,7 @@ writeFileSync(
   join(temp, 'preload.cjs'),
   `
 const { contextBridge } = require('electron');
-let state = JSON.parse(localStorage.getItem('bolo-ui-state') || ${JSON.stringify(JSON.stringify(appState))});
+let state = JSON.parse(localStorage.getItem('echo-ui-state') || ${JSON.stringify(JSON.stringify(appState))});
 let detail = ${JSON.stringify(meeting)};
 let actions = Array.from({length: 10}, (_, index) => ({meetingId: detail.id, meetingTitle: detail.title, meetingStartedAt: detail.startedAt, index, text: 'Follow up item ' + index, owner: 'Krunal', done: index === 9}));
 let recent = Array.from({length: 7}, (_, i) => ({...detail, id: 'm' + (detail.startedAt - i * 86400000), title: i ? 'Planning ' + i : detail.title, startedAt: detail.startedAt - i * 86400000}));
@@ -114,9 +114,9 @@ const emit = event => {
   if (event.type === 'detected') state.detected = event.meeting;
   for (const listener of listeners) listener(event);
 };
-contextBridge.exposeInMainWorld('bolo', {
+contextBridge.exposeInMainWorld('echo', {
   getState: async () => state,
-  updateSettings: async patch => { calls.push(['updateSettings', patch]); state.settings = {...state.settings, ...patch}; localStorage.setItem('bolo-ui-state', JSON.stringify(state)); return state.settings; },
+  updateSettings: async patch => { calls.push(['updateSettings', patch]); state.settings = {...state.settings, ...patch}; localStorage.setItem('echo-ui-state', JSON.stringify(state)); return state.settings; },
   onEvent: listener => { listeners.add(listener); return () => listeners.delete(listener); },
   listMeetings: async query => recent.filter(m => (m.title + m.snippet).toLowerCase().includes(query.toLowerCase())),
   listActionItems: async () => actions,
@@ -135,11 +135,11 @@ contextBridge.exposeInMainWorld('bolo', {
   askMeetings: async (question, askId) => { calls.push(['askMeetings', question]); await wait(70); emit({type: 'ask-progress', askId, text: 'We agreed to send'}); await wait(150); return {text: 'We agreed to send the revised quotation on Thursday.', verdict: 'files', sources: [{name: detail.title, meetingId: detail.id}]}; },
   connectAccount: async provider => { await wait(250); if (connectError) return {ok: false, error: 'Sign-in was cancelled. Try again.'}; const account = {id: provider + ':krunal@example.test', provider, email: 'krunal@example.test'}; state.integrations.accounts.push(account); emit({type: 'integrations', integrations: state.integrations}); return {ok: true, account}; },
   disconnectAccount: async id => { state.integrations.accounts = state.integrations.accounts.filter(a => a.id !== id); emit({type: 'integrations', integrations: state.integrations}); },
-  chooseContextDir: async () => { state.context = {dir: 'C:/Bolo/context', files: [{name: 'price-list.md', info: '2 KB'}], skipped: []}; return state.context; },
+  chooseContextDir: async () => { state.context = {dir: 'C:/Echo/context', files: [{name: 'price-list.md', info: '2 KB'}], skipped: []}; return state.context; },
   reloadContext: async () => state.context,
   chooseCalendarFile: async clear => { state.settings.calendarFile = clear ? '' : 'calendar.ics'; return state.calendar; },
   refreshCalendar: async () => state.calendar,
-  chooseExportDir: async () => { state.settings.exportDir = 'C:/Bolo/exports'; return state.settings.exportDir; },
+  chooseExportDir: async () => { state.settings.exportDir = 'C:/Echo/exports'; return state.settings.exportDir; },
   openExportDir: () => {}, window: command => calls.push(['window', command]), openApp: section => calls.push(['openApp', section]), openLibrary: () => {}, requestMeaning: id => calls.push(['requestMeaning', id]),
   showOverlayPanel: panel => calls.push(['showOverlayPanel', panel]),
   ask: (text, screen) => calls.push(['ask', text, screen]),
@@ -249,7 +249,7 @@ try {
       (c) => c[0] === 'openJoinLink' && c[1] === 'now',
     ),
   );
-  await page.getByRole('button', { name: 'Start with Bolo', exact: true }).click();
+  await page.getByRole('button', { name: 'Start with Echo', exact: true }).click();
   assert(
     (await page.evaluate(() => window.__uiTest.calls())).some(
       (c) => c[0] === 'requestStart' && c[1] === 'now',
@@ -339,7 +339,7 @@ try {
   await page.getByLabel('My name', { exact: true }).press('Tab');
   await shot('profile-820-light');
   assert.equal(
-    await page.evaluate(async () => (await window.bolo.getState()).settings.myName),
+    await page.evaluate(async () => (await window.echo.getState()).settings.myName),
     'Asha',
   );
   await settingsNav.getByRole('button', { name: 'Calendar & accounts', exact: true }).click();
@@ -391,17 +391,17 @@ try {
 
   // A first-run route still shows the stepper; returning preserves the requested section.
   await page.evaluate(() =>
-    window.bolo.updateSettings({ onboarded: false, consentAcknowledged: false, consentVersion: 0 }),
+    window.echo.updateSettings({ onboarded: false, consentAcknowledged: false, consentVersion: 0 }),
   );
   await page.reload();
-  await page.getByRole('heading', { name: 'Be here. Bolo remembers.', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Be here. Echo remembers.', exact: true }).waitFor();
   await shot('onboarding-820-dark');
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await shot('onboarding-820-light');
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await page.getByRole('button', { name: /I understand/ }).click();
   assert.equal(
-    await page.evaluate(async () => (await window.bolo.getState()).settings.consentVersion),
+    await page.evaluate(async () => (await window.echo.getState()).settings.consentVersion),
     CONSENT_VERSION,
   );
   await page.getByLabel('My name', { exact: true }).fill('Priya');
@@ -414,10 +414,10 @@ try {
   await page.getByRole('button', { name: 'Let’s begin', exact: true }).click();
   await page.getByRole('navigation', { name: 'Main navigation', exact: true }).waitFor();
   assert.equal(
-    await page.evaluate(async () => (await window.bolo.getState()).settings.onboarded),
+    await page.evaluate(async () => (await window.echo.getState()).settings.onboarded),
     true,
   );
-  await page.evaluate(() => window.bolo.updateSettings({ onboarded: false }));
+  await page.evaluate(() => window.echo.updateSettings({ onboarded: false }));
   await page.reload();
   await page.getByRole('button', { name: 'Skip setup', exact: true }).click();
   await page.getByRole('navigation', { name: 'Main navigation', exact: true }).waitFor();
@@ -441,7 +441,7 @@ try {
   await page.locator('.calendar-offer').waitFor();
   assert.equal(await page.locator('.detected-offer').count(), 0);
   await page.getByTitle('More', { exact: true }).click();
-  await page.getByRole('button', { name: 'Open Bolo', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Echo', exact: true }).click();
   assert(
     (await page.evaluate(() => window.__uiTest.calls())).some(
       (c) => c[0] === 'openApp' && c[1] === 'home',
@@ -496,7 +496,7 @@ try {
   assert.deepEqual(await live.locator('.message-header strong').allTextContents(), [
     'Them',
     'Them',
-    'Bolo',
+    'Echo',
     'Them',
   ]);
   await live.getByRole('button', { name: /Explain: Achha/ }).focus();
@@ -513,7 +513,7 @@ try {
   await page.locator('.mention.asked').waitFor();
   await shot('overlay-live-light');
 
-  const ask = page.getByLabel('Ask Bolo', { exact: true });
+  const ask = page.getByLabel('Ask Echo', { exact: true });
   await ask.fill('Keep this draft');
   await page.getByRole('tab', { name: 'Live', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
@@ -547,10 +547,10 @@ try {
   await shot('overlay-collapsed-light');
   await page.getByRole('button', { name: 'Ask', exact: true }).click();
   await page.waitForFunction(
-    () => document.activeElement?.getAttribute('aria-label') === 'Ask Bolo',
+    () => document.activeElement?.getAttribute('aria-label') === 'Ask Echo',
   );
   assert.equal(await ask.inputValue(), 'Keep this draft');
-  await page.evaluate(() => window.bolo.updateSettings({ llmVisionModel: 'vision-test' }));
+  await page.evaluate(() => window.echo.updateSettings({ llmVisionModel: 'vision-test' }));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.getByRole('button', { name: 'Attach my screen', exact: true }).click();
   await ask.fill('Read this screen');

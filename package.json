@@ -1,6 +1,6 @@
 {
-  "name": "bolo",
-  "productName": "Bolo",
+  "name": "echo",
+  "productName": "Echo",
   "version": "0.1.0",
   "description": "Real-time AI copilot for Indian-language calls, powered by Gnani speech-to-text",
   "main": "./out/main/index.js",

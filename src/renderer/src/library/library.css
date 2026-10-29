@@ -13,9 +13,6 @@
   background: var(--sidebar);
   padding-bottom: 90px;
 }
-.lib-side > .sidebar-title {
-  padding: 0 20px;
-}
 .lib-search {
   display: flex;
   align-items: center;
@@ -100,6 +97,18 @@
   font-size: 11px;
   color: var(--muted);
   padding-left: 24px;
+}
+.lib-upcoming-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.lib-upcoming-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
 }
 .lib-item-snippet {
   font-size: 12px;
@@ -557,18 +566,5 @@
   }
   .lib-side {
     border: none;
-  }
-}
-.library-sidebar-top {
-  padding: 0 12px;
-  flex: none;
-}
-.lib-side > .sidebar-section {
-  margin: 12px 12px;
-  flex: none;
-}
-@media (max-width: 979px) {
-  .library-sidebar-top {
-    display: none;
   }
 }

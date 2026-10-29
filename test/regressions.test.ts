@@ -180,7 +180,7 @@ describe('number check and the transcript', () => {
 
 describe('context folder', () => {
   it('a file that is not UTF-8 does not use up the room for the files after it', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bolo-ctx-'));
+    const dir = mkdtempSync(join(tmpdir(), 'echo-ctx-'));
     const bad = new Uint8Array(1_000_000).fill(0xff);
     for (const n of ['a1.csv', 'a2.csv', 'a3.csv', 'a4.csv']) writeFileSync(join(dir, n), bad);
     writeFileSync(join(dir, 'stock.csv'), 'item,qty\nPipe,120');
@@ -189,7 +189,7 @@ describe('context folder', () => {
   });
 
   it('skips what it cannot read and keeps the rest', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'bolo-ctx-'));
+    const dir = mkdtempSync(join(tmpdir(), 'echo-ctx-'));
     mkdirSync(join(dir, 'sub'));
     writeFileSync(join(dir, 'notes.md'), 'Delivery in 3 days');
     const { context, error } = await readContextDir(dir);

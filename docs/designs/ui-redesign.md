@@ -1,10 +1,10 @@
-# Bolo UI redesign: a full app with a home dashboard
+# Echo UI redesign: a full app with a home dashboard
 
 Status: spec for implementation (2026-10-28). Implementer: Codex. Reviewer: Claude.
 
 ## Goal
 
-Bolo is a meeting buddy for people who take meetings in Indian languages. Today it is a
+Echo is a meeting buddy for people who take meetings in Indian languages. Today it is a
 slim overlay plus a plain "Meetings" library window. Make it feel like a polished,
 friendly product (think Granola / Muse / Notion calm): a **main window** with a home
 dashboard, and a refreshed in-call **overlay**.
@@ -15,7 +15,7 @@ dashboard, and a refreshed in-call **overlay**.
   web fonts (the CSP is `default-src 'self'`; nothing loads from the network). Use the
   system font stack and inline SVG icons (extend `src/renderer/src/components/Icon.tsx`).
 - **Do not change** `src/main/**`, `src/preload/**`, `src/core/**`, `src/shared/**`. They
-  are the contract (`window.bolo`, typed in `src/preload/api.ts`; events in
+  are the contract (`window.echo`, typed in `src/preload/api.ts`; events in
   `src/shared/ipc.ts`). If you need something the contract lacks, write it under
   "Contract requests" in your final message instead of changing it.
 - Everything typed: `npm run typecheck`, `npm run lint` (`--max-warnings 0`), `npm test`
@@ -48,7 +48,7 @@ amber for "check this". Comfortable 14px body text, generous spacing.
 
 ```
 ┌──────────────┬───────────────────────────────────────────────────┐
-│ ● Bolo       │  (section content)                                 │
+│ ● Echo       │  (section content)                                 │
 │              │                                                    │
 │ [▶ Start a   │                                                    │
 │   meeting]   │                                                    │
@@ -65,7 +65,7 @@ amber for "check this". Comfortable 14px body text, generous spacing.
 ```
 
 - Sidebar (~220px; collapses to icons under 980px): brand, primary **Start a meeting**
-  button (`window.bolo.requestStart()`; disabled with a hint while a call is running),
+  button (`window.echo.requestStart()`; disabled with a hint while a call is running),
   nav, and a live status block at the bottom while a call runs (timer from
   `session`/`paused` events: "Listening" / "Paused"; buttons Pause/Resume →
   `setPaused`, Stop → `stopSession()` then show the result as a toast with "Open").
@@ -80,9 +80,9 @@ Cards (CSS grid, 2 columns ≥ 1100px, 1 column below):
 1. **Happening now / Up next** — from `state.calendar.events` (see `meetingNow` in
    `src/shared/calendar.ts`) and `state.detected` (a call another app is in). Shows title,
    time ("starts in 3 min"), people (avatars with initials, max 4 + "+n"), source badge
-   (Google / Outlook / iCal from `event.source` prefix), and buttons **Start with Bolo**
+   (Google / Outlook / iCal from `event.source` prefix), and buttons **Start with Echo**
    (`requestStart(event.key)`) and **Join** (`openJoinLink(event.key)`, only if
-   `joinUrl`). If only `detected` is set: "Zoom call in progress — Start with Bolo"
+   `joinUrl`). If only `detected` is set: "Zoom call in progress — Start with Echo"
    (`requestStart()`). If nothing: friendly empty state with "Start a meeting".
 2. **Today** — the rest of today's and tomorrow's events as a timeline (time, title,
    people count, Start button within the next hour). If no calendar is connected:
@@ -148,7 +148,7 @@ Text fields commit on blur (see `useDraft` in `SettingsPanel.tsx`) through
 ### Onboarding (first run)
 
 If `settings.onboarded` is false, the main window shows a centred stepper instead of the
-sidebar layout: 1 Welcome (what Bolo does, privacy promise, the consent text with an
+sidebar layout: 1 Welcome (what Echo does, privacy promise, the consent text with an
 "I understand — I will ask for consent" button that sets `consentAcknowledged: true,
 consentVersion: CONSENT_VERSION`) → 2 Your name (+ watch words) → 3 Connect your calendar
 (Google / Outlook / iCal link / Skip) → 4 Your knowledge (context folder, optional) →
@@ -164,16 +164,16 @@ subtle enter animations (respect `prefers-reduced-motion`). Add:
 
 - A **detected call** strip like the calendar offer when `state.app.detected` is set, no
   call is running and it was not dismissed (dismiss per `detected.key`): "Zoom call
-  detected · Start with Bolo · ×". If a calendar meeting is offered at the same time, show
+  detected · Start with Echo · ×". If a calendar meeting is offered at the same time, show
   only the calendar strip (it carries the title).
-- Menu: "Open Bolo" (`openApp('home')`) next to "Meetings".
+- Menu: "Open Echo" (`openApp('home')`) next to "Meetings".
 
 ## Must keep working (the end-to-end test drives these)
 
 `scripts/e2e-electron.mjs` uses these names; keep them, or update the script to match
 and keep each check's intent:
 
-- Overlay: button "Start", status "Listening", label "Ask Bolo", tabs Live/Transcript/
+- Overlay: button "Start", status "Listening", label "Ask Echo", tabs Live/Transcript/
   Context/Settings, texts "Before you record a call", "I understand", "Keys (from .env",
   "Answer · from your files", "Answer · not in your files", "Answer · from your screen",
   "Catch-up · last 10 min", "Answer · from past meetings", "Mentioned: …", classes

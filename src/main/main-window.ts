@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { AppSection } from '../shared/ipc.ts';
 import { MEETING_ID } from '../shared/meeting.ts';
 
-export const APP_SECTIONS: readonly AppSection[] = ['home', 'meetings', 'ask', 'settings'];
+export const APP_SECTIONS: readonly AppSection[] = ['home', 'todo', 'meetings', 'ask', 'settings'];
 
 /** The renderer route for a section, e.g. "app/meetings/m1790000000000". */
 export function appHash(section: AppSection = 'home', meetingId?: string): string {
@@ -14,7 +14,7 @@ export function appHash(section: AppSection = 'home', meetingId?: string): strin
 /**
  * The main window: home, meetings, ask, settings. A normal window (in the taskbar,
  * shareable on screen, unlike the overlay) running the same renderer bundle with #app in
- * the URL.
+ * the URL. With it closed, Echo has no taskbar button; the overlay menu reopens it.
  */
 export function createMainWindow(section: AppSection = 'home', meetingId?: string): BrowserWindow {
   const win = new BrowserWindow({
@@ -22,7 +22,7 @@ export function createMainWindow(section: AppSection = 'home', meetingId?: strin
     height: 800,
     minWidth: 820,
     minHeight: 540,
-    title: 'Bolo',
+    title: 'Echo',
     backgroundColor: '#f7f7f5',
     autoHideMenuBar: true,
     show: false,

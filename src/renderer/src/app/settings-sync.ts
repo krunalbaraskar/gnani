@@ -1,5 +1,5 @@
 /** Settings have no IPC event. Notify sibling renderers to re-read the typed API. */
-const CHANNEL = 'bolo-settings-updated';
+const CHANNEL = 'echo-settings-updated';
 
 export function settingsChanged() {
   const channel = new BroadcastChannel(CHANNEL);

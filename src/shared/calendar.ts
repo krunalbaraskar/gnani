@@ -1,7 +1,7 @@
 /** The user's calendar as the windows see it. Types and pure helpers only. */
 
 export interface CalendarEventView {
-  /** Unique per occurrence; what "Start with Bolo" sends back. */
+  /** Unique per occurrence; what "Start with Echo" sends back. */
   key: string;
   title: string;
   start: number;
@@ -42,8 +42,16 @@ export function meetingNow(
   return event ? { event, startsInMs: event.start - now } : null;
 }
 
+/** "45 min", "2 h", "21 h 43 min". */
+function duration(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
 export function startsInLabel(ms: number): string {
-  if (ms <= 0) return ms > -60_000 ? 'starting now' : `started ${Math.round(-ms / 60_000)} min ago`;
-  const min = Math.ceil(ms / 60_000);
-  return `starts in ${min} min`;
+  if (ms <= 0)
+    return ms > -60_000 ? 'starting now' : `started ${duration(Math.round(-ms / 60_000))} ago`;
+  return `starts in ${duration(Math.ceil(ms / 60_000))}`;
 }

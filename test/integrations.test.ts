@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  googleCalendarIds,
   googleEventsUrl,
   graphEventsUrl,
   mapGoogleEvents,
@@ -98,7 +99,7 @@ describe('OAuth helpers', () => {
   });
 
   it('shows a plain page after the redirect, with no script', () => {
-    expect(callbackPage(true)).toContain('Bolo is connected');
+    expect(callbackPage(true)).toContain('Echo is connected');
     expect(callbackPage(false)).not.toMatch(/<script/i);
   });
 });
@@ -194,6 +195,23 @@ describe('calendar events from accounts', () => {
     );
   });
 
+  it('reads every calendar ticked in Google Calendar, not just the primary', () => {
+    const ids = googleCalendarIds({
+      items: [
+        { id: 'me@x.com', primary: true },
+        { id: 'skyeasy@group.calendar.google.com', selected: true },
+        { id: 'holidays@group.v.calendar.google.com' },
+        { id: 'en.indian#holiday@group.v.calendar.google.com', selected: true },
+        { id: 'old@group.calendar.google.com', selected: true, hidden: true },
+      ],
+    });
+    expect(ids).toEqual(['me@x.com', 'skyeasy@group.calendar.google.com']);
+    expect(googleCalendarIds({})).toEqual(['primary']);
+    expect(new URL(googleEventsUrl('https://api/cal', 0, 1, 'a#b@x.com')).pathname).toBe(
+      '/cal/calendars/a%23b%40x.com/events',
+    );
+  });
+
   it('strips HTML from descriptions', () => {
     expect(plainText('<p>Hi</p><p>there&nbsp;<b>you</b></p>')).toBe('Hi\nthere you');
   });
@@ -231,7 +249,7 @@ describe('meetings detected from microphone use', () => {
       '    LastUsedTimeStop    REG_QWORD    0x0',
     ].join('\r\n');
 
-  it('reports apps using the mic now, meeting apps first, never Bolo itself', () => {
+  it('reports apps using the mic now, meeting apps first, never Echo itself', () => {
     const users = parseMicUsage(reg('0x0', '0x0'), [
       'E:\\gnani\\node_modules\\electron\\dist\\electron.exe',
     ]);

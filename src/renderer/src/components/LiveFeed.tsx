@@ -28,11 +28,11 @@ export function LiveFeed({ state, themName }: { state: UiState; themName: string
       {!posts.length && (
         <div className="feed-empty">
           <strong>
-            {state.running ? 'You’re here. Bolo is listening.' : 'Be here. Bolo remembers.'}
+            {state.running ? 'You’re here. Echo is listening.' : 'Be here. Echo remembers.'}
           </strong>
           <p>
             {state.running
-              ? 'Their words and Bolo’s answers appear here.'
+              ? 'Their words and Echo’s answers appear here.'
               : 'Press Start when your call begins.'}
           </p>
           <p className="small">
@@ -57,7 +57,7 @@ export function LiveFeed({ state, themName }: { state: UiState; themName: string
             key={suggestion!.id}
             suggestion={suggestion}
             running={state.running}
-            onRequest={() => window.bolo.requestSuggestion()}
+            onRequest={() => window.echo.requestSuggestion()}
           />
         ),
       )}

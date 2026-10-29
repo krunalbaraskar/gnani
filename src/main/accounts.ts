@@ -6,6 +6,8 @@ import { dirname } from 'node:path';
 import type { CalendarEvent } from '../core/calendar/ics.ts';
 import {
   GRAPH_HEADERS,
+  googleCalendarIds,
+  googleCalendarListUrl,
   googleEventsUrl,
   graphEventsUrl,
   mapGoogleEvents,
@@ -23,12 +25,14 @@ import {
   type ProviderConfig,
   type TokenSet,
 } from '../core/integrations/oauth.ts';
+import { meetingLink, newMeetingRequest } from '../core/integrations/online-meetings.ts';
 import type { Logger } from '../core/util/logger.ts';
 import type {
   AccountProvider,
   AccountView,
   ConnectResult,
   IntegrationsView,
+  NewMeetingResult,
 } from '../shared/integrations.ts';
 
 const SIGN_IN_TIMEOUT_MS = 5 * 60_000;
@@ -58,7 +62,7 @@ export interface AccountsOptions {
 }
 
 /**
- * Google and Microsoft calendar accounts. Sign-in happens in the user's browser; Bolo only
+ * Google and Microsoft calendar accounts. Sign-in happens in the user's browser; Echo only
  * receives an authorization code on a one-time 127.0.0.1 listener. Refresh tokens are
  * encrypted at rest and never leave this process.
  */
@@ -247,6 +251,46 @@ export class AccountsService {
     return a.tokens.accessToken;
   }
 
+  /** A new Google Meet or Teams meeting on the first connected account of that kind. */
+  async createMeeting(provider: AccountProvider): Promise<NewMeetingResult> {
+    await this.load();
+    const name = provider === 'google' ? 'Google' : 'Microsoft';
+    const a = this.accounts.find((x) => x.provider === provider);
+    const cfg = a && this.o.config(provider);
+    if (!a || !cfg)
+      return { ok: false, error: `Connect a ${name} account first (You → Calendar & accounts).` };
+    try {
+      const token = await this.accessToken(a, cfg);
+      const req = newMeetingRequest(provider, cfg.meetingsApi, Date.now());
+      const res = await fetch(req.url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.status === 401) throw new Error('Access was removed. Connect the account again.');
+      if (res.status === 403) {
+        const body = await res.text().catch(() => '');
+        throw new Error(
+          forbiddenReason(body, provider === 'google' ? 'Google Meet REST API' : 'Teams'),
+        );
+      }
+      if (!res.ok) throw new Error(`${name} answered HTTP ${res.status}.`);
+      const url = meetingLink(provider, await res.json());
+      if (!url) throw new Error(`${name} did not send a meeting link.`);
+      return { ok: true, url };
+    } catch (err) {
+      const msg = (err as Error).message;
+      this.o.log.warn('could not create a meeting', { provider, error: msg });
+      return {
+        ok: false,
+        error: /refused \(invalid_grant/.test(msg)
+          ? 'Access was removed. Connect the account again.'
+          : msg,
+      };
+    }
+  }
+
   /** Events from every connected account in [from, to). One failing account never hides the rest. */
   async events(from: number, to: number): Promise<CalendarEvent[]> {
     await this.load();
@@ -259,18 +303,34 @@ export class AccountsService {
       try {
         const token = await this.accessToken(a, cfg);
         const google = a.provider === 'google';
-        const res = await fetch(
-          google ? googleEventsUrl(cfg.apiBase, from, to) : graphEventsUrl(cfg.apiBase, from, to),
-          {
+        const get = async (url: string): Promise<unknown> => {
+          const res = await fetch(url, {
             headers: { Authorization: `Bearer ${token}`, ...(google ? {} : GRAPH_HEADERS) },
             signal: AbortSignal.timeout(20_000),
-          },
-        );
-        if (res.status === 401 || res.status === 403)
-          throw new Error('Access was removed. Connect the account again.');
-        if (!res.ok) throw new Error(`The calendar answered HTTP ${res.status}.`);
-        const json = await res.json();
-        all.push(...(google ? mapGoogleEvents(json, a.id) : mapGraphEvents(json, a.id)));
+          });
+          if (res.status === 401) throw new Error('Access was removed. Connect the account again.');
+          if (res.status === 403)
+            throw new Error(forbiddenReason(await res.text().catch(() => '')));
+          if (!res.ok) throw new Error(`The calendar answered HTTP ${res.status}.`);
+          return res.json();
+        };
+        if (!google) {
+          all.push(...mapGraphEvents(await get(graphEventsUrl(cfg.apiBase, from, to)), a.id));
+        } else {
+          // Every calendar ticked in Google Calendar, not just the primary one. Without the
+          // calendar-list permission (signed in before it was asked for), the primary only.
+          const ids = await get(googleCalendarListUrl(cfg.apiBase)).then(
+            googleCalendarIds,
+            () => ['primary'],
+          );
+          const results = await Promise.allSettled(
+            ids.map((id) => get(googleEventsUrl(cfg.apiBase, from, to, id))),
+          );
+          const read = results.filter((r) => r.status === 'fulfilled');
+          // One unreadable calendar (a removed share) never hides the rest.
+          if (!read.length) throw (results[0] as PromiseRejectedResult).reason;
+          for (const r of read) all.push(...mapGoogleEvents(r.value, a.id));
+        }
         a.error = undefined;
       } catch (err) {
         const msg = (err as Error).message;
@@ -284,4 +344,13 @@ export class AccountsService {
     if (errorsChanged) this.changed();
     return all;
   }
+}
+
+/** Why an API said 403, in words the user can act on (Google and Graph error bodies). */
+export function forbiddenReason(body: string, api = 'Google Calendar API'): string {
+  if (/SERVICE_DISABLED|accessNotConfigured|has not been used in project/i.test(body))
+    return `The ${api} is turned off for this app. Enable it in Google Cloud Console, then try again.`;
+  if (/insufficient.*scope|ACCESS_TOKEN_SCOPE_INSUFFICIENT|Authorization_RequestDenied/i.test(body))
+    return 'Echo was not given that permission. Connect the account again and tick every box.';
+  return 'Access was removed. Connect the account again.';
 }

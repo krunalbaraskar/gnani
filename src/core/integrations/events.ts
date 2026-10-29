@@ -1,5 +1,5 @@
 /**
- * Google Calendar and Microsoft Graph events as Bolo calendar events (the same shape the
+ * Google Calendar and Microsoft Graph events as Echo calendar events (the same shape the
  * iCal parser produces). Pure: the main process does the requests.
  */
 import type { CalendarEvent } from '../calendar/ics.ts';
@@ -48,7 +48,12 @@ function localDate(d: string): number {
   return new Date(y!, (m ?? 1) - 1, day ?? 1).getTime();
 }
 
-export function googleEventsUrl(apiBase: string, from: number, to: number): string {
+export function googleEventsUrl(
+  apiBase: string,
+  from: number,
+  to: number,
+  calendarId = 'primary',
+): string {
   const q = new URLSearchParams({
     timeMin: new Date(from).toISOString(),
     timeMax: new Date(to).toISOString(),
@@ -56,7 +61,38 @@ export function googleEventsUrl(apiBase: string, from: number, to: number): stri
     orderBy: 'startTime',
     maxResults: '100',
   });
-  return `${apiBase}/calendars/primary/events?${q}`;
+  return `${apiBase}/calendars/${encodeURIComponent(calendarId)}/events?${q}`;
+}
+
+export function googleCalendarListUrl(apiBase: string): string {
+  return `${apiBase}/users/me/calendarList?minAccessRole=reader&maxResults=50`;
+}
+
+/** Google's own calendars (holidays, birthdays, week numbers) hold no meetings. */
+const GOOGLE_PROVIDED = /@group\.v\.calendar\.google\.com$/i;
+
+/**
+ * The calendars ticked in Google Calendar's sidebar (plus the primary one), from a
+ * `calendarList.list` response, minus Google's holiday and birthday calendars;
+ * ['primary'] if it lists none.
+ */
+export function googleCalendarIds(json: unknown): string[] {
+  const items = ((json as { items?: unknown[] })?.items ?? []) as {
+    id?: string;
+    primary?: boolean;
+    selected?: boolean;
+    hidden?: boolean;
+  }[];
+  const ids = items
+    .filter(
+      (c) =>
+        typeof c.id === 'string' &&
+        !c.hidden &&
+        (c.primary || c.selected) &&
+        !GOOGLE_PROVIDED.test(c.id),
+    )
+    .map((c) => c.id!);
+  return ids.length ? ids : ['primary'];
 }
 
 interface GPerson {
@@ -72,6 +108,9 @@ export function mapGoogleEvents(json: unknown, source: string): CalendarEvent[] 
   const out: CalendarEvent[] = [];
   for (const it of items) {
     if (it['status'] === 'cancelled') continue;
+    // Out of office, focus time, working location, birthdays: not meetings.
+    if (!['default', 'fromGmail', undefined].includes(it['eventType'] as string | undefined))
+      continue;
     const start = it['start'] as { dateTime?: string; date?: string } | undefined;
     const end = it['end'] as { dateTime?: string; date?: string } | undefined;
     const allDay = !start?.dateTime && !!start?.date;

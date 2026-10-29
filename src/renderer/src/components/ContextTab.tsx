@@ -62,18 +62,18 @@ function CalendarSection({
             </span>
             <button
               className="ghost small"
-              onClick={() => void window.bolo.chooseCalendarFile(true)}
+              onClick={() => void window.echo.chooseCalendarFile(true)}
             >
               Remove
             </button>
           </>
         ) : (
-          <button className="ghost small" onClick={() => void window.bolo.chooseCalendarFile()}>
+          <button className="ghost small" onClick={() => void window.echo.chooseCalendarFile()}>
             Or choose an .ics file…
           </button>
         )}
         {calendar.configured && (
-          <button className="ghost small" onClick={() => void window.bolo.refreshCalendar()}>
+          <button className="ghost small" onClick={() => void window.echo.refreshCalendar()}>
             Refresh
           </button>
         )}
@@ -111,7 +111,7 @@ function CalendarSection({
 }
 
 /**
- * What Bolo knows: who you are, the folder of reference files, past meetings, and the note
+ * What Echo knows: who you are, the folder of reference files, past meetings, and the note
  * about this call.
  */
 export function ContextTab({
@@ -165,11 +165,11 @@ export function ContextTab({
           <span className="path" title={context.dir}>
             {context.dir || 'No context folder yet'}
           </span>
-          <button className="ghost small" onClick={() => void window.bolo.chooseContextDir()}>
+          <button className="ghost small" onClick={() => void window.echo.chooseContextDir()}>
             <Icon name="folder" size={13} /> Choose folder…
           </button>
           {context.dir && (
-            <button className="ghost small" onClick={() => void window.bolo.reloadContext()}>
+            <button className="ghost small" onClick={() => void window.echo.reloadContext()}>
               Reload
             </button>
           )}
@@ -179,7 +179,7 @@ export function ContextTab({
         {!context.dir && (
           <p className="muted">
             Add a folder with your stock sheet, price list or project notes (.csv, .md, .txt,
-            .json). When they ask, Bolo answers from those files and shows which one.
+            .json). When they ask, Echo answers from those files and shows which one.
           </p>
         )}
 

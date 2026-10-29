@@ -4,8 +4,8 @@ Status: spec for implementation (2026-10-28). Implementer: Codex. Reviewer: Clau
 
 Reference: https://github.com/GetStream/slack-clone-react-native (a React Native Slack
 clone; its screenshots and `src/appTheme.js` are summarised below; the code itself is
-not copied, only the visual language). It is a phone app; Bolo is a desktop app with two
-windows, so this spec maps each element onto Bolo.
+not copied, only the visual language). It is a phone app; Echo is a desktop app with two
+windows, so this spec maps each element onto Echo.
 
 ## The design language to reproduce
 
@@ -77,14 +77,14 @@ Layout (desktop Slack built from the mobile pieces):
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ [B] Bolo            (  Jump to…                         ) 🔍       │ aubergine bar
+│ [B] Echo            (  Jump to…                         ) 🔍       │ aubergine bar
 ├────┬────────────────────┬──────────────────────────────────────────┤
 │ ⌂  │ ✦ Ask              │ # mehta-follow-up          ⓘ  ⋯         │ white header
 │Home│ ☑ To do        3   │ 6 members · Wed 28 Oct · 32 min         │
 │ ▤  │ ────────────────── │ ───────────── Today ─────────────────── │
 │Mtgs│ Today          +   │ [MH] Mehta Hardware  10:42 am           │
 │ ✦  │ ● 3:00 Mehta …     │      Achha, blue wala 5 litre…          │
-│Ask │   5:30 Weekly sync │ [B]  Bolo  APP  10:42 am                │
+│Ask │   5:30 Weekly sync │ [B]  Echo  APP  10:42 am                │
 │ ☺  │ Meetings       +   │      ┃ Answer · from your files          │
 │You │ # blue-5-litre…    │      ┃ Blue 5 litre ke 142 units…        │
 │    │ # pricing-review   │      ┃ (inventory.csv) (price-list.md)   │
@@ -95,7 +95,7 @@ Layout (desktop Slack built from the mobile pieces):
 ```
 
 - **Top bar** (aubergine, full width, 48 px, the window's drag region is the OS title
-  bar, so this is just a header): app tile "B" (rounded 6 px square), "Bolo", a "Jump to"
+  bar, so this is just a header): app tile "B" (rounded 6 px square), "Echo", a "Jump to"
   search (focus with Ctrl+K) that filters meetings by title and jumps to sections; while
   a call runs, a pill on the right: green dot · "Live 12:04" · Pause · Stop.
 - **Rail** (left, 64–72 px, aubergine-tinted in light like Slack desktop's workspace
@@ -111,7 +111,7 @@ Layout (desktop Slack built from the mobile pieces):
   (`requestStart()`; keep the accessible name "Start a meeting").
 - **Home**: a "channel"-like page: header "Home" with today's date; "Up next / happening
   now" as a highlighted message-like card (avatar stack, title, "starts in 3 min",
-  buttons **Start with Bolo**, **Join**); a detected call as the same card ("Zoom call in
+  buttons **Start with Echo**, **Join**); a detected call as the same card ("Zoom call in
   progress"); then **Today** (DM-style rows with attendee avatar stacks), **To do**
   (checkbox rows, owner pill, meeting link), **Recent meetings** (DM-style rows: avatar
   stack, title, "Them: last line…" preview, minutes state badge). Keep the behaviour and
@@ -119,7 +119,7 @@ Layout (desktop Slack built from the mobile pieces):
 - **Meetings** → a meeting is a **channel**: header `# slug` with "N members · date ·
   duration" and an ⓘ that opens a details side sheet (attendees, agenda, mode, pauses);
   header tabs **Minutes · Transcript · Notes & answers** (keep the tab roles/names).
-  Transcript = message list with date separator, avatars, grouping, Bolo answers as
+  Transcript = message list with date separator, avatars, grouping, Echo answers as
   `APP` posts with source "reaction pills", mentioned lines highlighted, speaker picker
   on "them" names (keep `.who-pick`, "They are", "Guess who said what"). Minutes =
   the rendered minutes as a pinned post at the top with an actions row (Edit, Copy,
@@ -127,8 +127,8 @@ Layout (desktop Slack built from the mobile pieces):
   lives in the sidebar; on narrow widths, a list page with "Jump to" + rows. Keep search
   (label "Search meetings") and its "No meeting mentions all of that…" message.
 - **Ask** = a thread view titled "Ask your meetings" with the conversation as messages
-  (You / Bolo APP), source pills that open the meeting, and a composer
-  "Message Bolo about your meetings". Keep `.ask-sources .chip` and "From your meetings".
+  (You / Echo APP), source pills that open the meeting, and a composer
+  "Message Echo about your meetings". Keep `.ask-sources .chip` and "From your meetings".
 - **You (Settings)**: a profile header (big square avatar with initials, name, "Edit")
   then grouped list rows like the reference's profile screen (Profile, Calendar &
   accounts, During meetings, Knowledge, After meetings, AI & speech, Privacy) — each a
@@ -137,14 +137,14 @@ Layout (desktop Slack built from the mobile pieces):
   "Connect Google Calendar", "Connect Outlook", "Disconnect", "Settings sections" nav
   with "AI & speech", "Open audio settings").
 - **Onboarding**: keep the 5 steps; present them as a centred card with an aubergine
-  header ("Welcome to Bolo") like the reference's sheet.
+  header ("Welcome to Echo") like the reference's sheet.
 - Toasts: dark rounded snackbar bottom-centre.
 
 ## Overlay (call bar, no hash)
 
 ```
 ╭──────────────────────────────────────────────────────────╮ 44 px aubergine bar
-│ [B] Bolo  ● Live 00:12  ⏸ ■ │ Them●  Me● │ Active ▾ ⛨ ⌃ ⋯ │
+│ [B] Echo  ● Live 00:12  ⏸ ■ │ Them●  Me● │ Active ▾ ⛨ ⌃ ⋯ │
 ╰──────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────╮ banner (white card)
 │ @ Mentioned: Mehta Hardware  “Hello, Mehta Hardware…”  × │
@@ -154,12 +154,12 @@ Layout (desktop Slack built from the mobile pieces):
 │ ─────────────── Today ───────────────                    │
 │ [T] Them  07:06 pm                                       │
 │     Hello, Mehta Hardware se bol raha hoon…              │
-│ [B] Bolo  APP  07:06 pm                                  │
+│ [B] Echo  APP  07:06 pm                                  │
 │     ┃ Answer · from your files                           │
 │     ┃ Blue 5 litre ke 142 units…                         │
 │     ┃ (inventory.csv) (price-list.md)                    │
 │ ──────────────────────────────────────────────────────── │
-│ Message Bolo…                                            │
+│ Message Echo…                                            │
 │ ⟲ Catch me up  🖥                                    ➤   │
 ╰──────────────────────────────────────────────────────────╯
 ```
@@ -170,7 +170,7 @@ Layout (desktop Slack built from the mobile pieces):
 - Panel: white (dark `#19181C`) card, header tabs styled like the channel header,
   message list (current `LiveFeed`/`Transcript` restyled to the message pattern above),
   composer with blue paper-plane send, banners as white cards with an icon and actions.
-- Menu ⋯ = an action sheet card (icon rows: Open Bolo, Meetings, Click-through, Hide,
+- Menu ⋯ = an action sheet card (icon rows: Open Echo, Meetings, Click-through, Hide,
   Quit in red).
 - Keep the calm rules: nothing flashes; mentions use a soft yellow background
   (Slack's mention highlight), questions for the user slightly stronger, never red.
@@ -180,7 +180,7 @@ Layout (desktop Slack built from the mobile pieces):
 Keep these, or update `scripts/e2e-electron.mjs` / `scripts/e2e-ui.mjs` to match while
 keeping every check's intent (never delete a check):
 
-- Overlay: button "Start", status "Listening", label "Ask Bolo", tabs Live/Transcript/
+- Overlay: button "Start", status "Listening", label "Ask Echo", tabs Live/Transcript/
   Context/Settings, "Mode: Active", title "Stop the call and save", "Expand"/"Collapse",
   consent "Before you record a call" + "I understand…" (contrast ≥ 4.5:1 is checked),
   "Keys (from .env", two `input[type=file]` for WAV replay, answer titles ("Answer · from

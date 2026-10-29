@@ -26,6 +26,9 @@ export interface IntegrationsView {
 
 export type ConnectResult = { ok: true; account: AccountView } | { ok: false; error: string };
 
+/** A new Google Meet / Teams meeting: its join link, or why it could not be made. */
+export type NewMeetingResult = { ok: true; url: string } | { ok: false; error: string };
+
 /** A call noticed on this computer: another app is using the microphone. */
 export interface DetectedMeeting {
   /** Changes when a new call starts, so a dismissed one does not hide the next. */
@@ -33,6 +36,14 @@ export interface DetectedMeeting {
   /** e.g. "Zoom", "Microsoft Teams", "Google Chrome" (a Meet tab), "Slack". */
   app: string;
   since: number;
+}
+
+/** A to-do the user added by hand on the To do page (not from any meeting). */
+export interface TodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: number;
 }
 
 /** One action item from a meeting's minutes, for the dashboard's to-do list. */

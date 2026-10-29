@@ -1,7 +1,7 @@
 /** Overlay UI state. A pure reducer, so it is unit-tested in Node. */
 import type {
   AppState,
-  BoloEvent,
+  EchoEvent,
   MentionView,
   SttStatusView,
   SuggestionView,
@@ -48,7 +48,7 @@ export interface UiState {
 
 export type UiAction =
   | { type: 'init'; app: AppState }
-  | { type: 'event'; event: BoloEvent }
+  | { type: 'event'; event: EchoEvent }
   | { type: 'settings'; settings: Settings }
   | { type: 'starting' }
   | { type: 'start-failed'; error: string }
@@ -151,7 +151,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
   }
 }
 
-function applyEvent(state: UiState, e: BoloEvent): UiState {
+function applyEvent(state: UiState, e: EchoEvent): UiState {
   switch (e.type) {
     case 'segment': {
       const s = e.segment;

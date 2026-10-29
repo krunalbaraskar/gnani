@@ -22,10 +22,10 @@ import { SCRIPT } from '../test/fixtures/script.ts';
 import { MeetingStore, newMeeting } from '../src/core/meetings/store.ts';
 
 const repo = join(import.meta.dirname, '..');
-const home = mkdtempSync(join(tmpdir(), 'bolo-pages-'));
+const home = mkdtempSync(join(tmpdir(), 'echo-pages-'));
 const shots = join(repo, 'test-results', 'pages');
 mkdirSync(shots, { recursive: true });
-const appData = join(home, 'appdata', 'Bolo');
+const appData = join(home, 'appdata', 'Echo');
 mkdirSync(appData, { recursive: true });
 
 // ---- Seed: settings, two past meetings with minutes, a calendar invite in 5 minutes ----
@@ -155,8 +155,8 @@ const app = await electron.launch({
   env: {
     ...process.env,
     ELECTRON_RUN_AS_NODE: undefined,
-    BOLO_USER_DATA: appData,
-    BOLO_RECORDABLE: '1',
+    ECHO_USER_DATA: appData,
+    ECHO_RECORDABLE: '1',
     GNANI_API_KEY: 'test-key',
     GNANI_STT_URL: await gnani.start(),
     LLM_BASE_URL: await llm.start(),
@@ -164,8 +164,8 @@ const app = await electron.launch({
     LLM_API_KEY: '',
     GOOGLE_CLIENT_ID: 'mock-client',
     GOOGLE_CLIENT_SECRET: 'mock-secret',
-    BOLO_OAUTH_MOCK: await oauth.start(),
-    BOLO_DETECT_FILE: detectFile,
+    ECHO_OAUTH_MOCK: await oauth.start(),
+    ECHO_DETECT_FILE: detectFile,
   },
 });
 
@@ -434,7 +434,7 @@ try {
     );
     // The call is detected; with a calendar meeting starting, that meeting keeps priority.
     await main.waitForFunction(
-      async () => (await window.bolo.getState()).detected?.app === 'Zoom',
+      async () => (await window.echo.getState()).detected?.app === 'Zoom',
       null,
       {
         timeout: 10000,
@@ -445,7 +445,7 @@ try {
     await main.getByText('Mehta follow-up').first().waitFor();
     await check(main, `${theme}-main-home-call-detected`);
     writeFileSync(detectFile, '');
-    await main.waitForFunction(async () => (await window.bolo.getState()).detected === null, null, {
+    await main.waitForFunction(async () => (await window.echo.getState()).detected === null, null, {
       timeout: 10000,
     });
   }
@@ -483,7 +483,7 @@ try {
   // ---------------- Onboarding (both themes) ----------------
   for (const theme of ['light', 'dark']) {
     await setTheme(theme);
-    await main.evaluate(() => window.bolo.updateSettings({ onboarded: false }));
+    await main.evaluate(() => window.echo.updateSettings({ onboarded: false }));
     await main.reload();
     for (let step = 1; step <= 5; step++) {
       await main.waitForTimeout(200);
@@ -492,7 +492,7 @@ try {
       if (!(await next.count())) break;
       await next.click();
     }
-    await main.evaluate(() => window.bolo.updateSettings({ onboarded: true }));
+    await main.evaluate(() => window.echo.updateSettings({ onboarded: true }));
     await main.reload();
   }
 

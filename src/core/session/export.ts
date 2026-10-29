@@ -5,11 +5,11 @@ function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-/** Local-time file name stem, e.g. bolo-session-2026-10-04_14-05-09 */
+/** Local-time file name stem, e.g. echo-session-2026-10-04_14-05-09 */
 export function exportBaseName(startedAt: number): string {
   const d = new Date(startedAt);
   return (
-    `bolo-session-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `echo-session-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
     `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
   );
 }
@@ -20,7 +20,7 @@ export function sessionToMarkdown(r: SessionRecord): string {
   const start = r.startedAt;
   const end = r.endedAt ?? r.segments.at(-1)?.at ?? start;
   const lines: string[] = [
-    `# Bolo session — ${new Date(start).toLocaleString('en-IN')}`,
+    `# Echo session — ${new Date(start).toLocaleString('en-IN')}`,
     '',
     `- Duration: ${formatClock(end - start)}`,
     `- Speech-to-text language: ${r.sttLanguage}`,
@@ -68,5 +68,5 @@ export function sessionToMarkdown(r: SessionRecord): string {
 }
 
 export function sessionToJson(r: SessionRecord): string {
-  return JSON.stringify({ version: 1, app: 'bolo', ...r }, null, 2) + '\n';
+  return JSON.stringify({ version: 1, app: 'echo', ...r }, null, 2) + '\n';
 }

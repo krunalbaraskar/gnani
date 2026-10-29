@@ -47,7 +47,7 @@ async function capture(overlay: BrowserWindow | null): Promise<string> {
     if (!source || source.thumbnail.isEmpty()) {
       throw new Error(
         process.platform === 'darwin'
-          ? 'no image (allow Screen Recording for Bolo in System Settings)'
+          ? 'no image (allow Screen Recording for Echo in System Settings)'
           : 'the system returned no image',
       );
     }

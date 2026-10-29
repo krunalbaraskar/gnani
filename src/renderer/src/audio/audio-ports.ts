@@ -19,7 +19,7 @@ export function openAudioPort(speaker: Speaker, timeoutMs = 3000): Promise<Messa
       resolve(port);
     }
     window.addEventListener('message', onMessage);
-    window.bolo.openAudioPort(speaker);
+    window.echo.openAudioPort(speaker);
   });
 }
 

@@ -7,7 +7,7 @@
  *   node scripts/e2e-electron.mjs          # Linux CI: xvfb-run -a node scripts/e2e-electron.mjs
  *
  * It uses a throwaway settings/userData folder, so it never touches your real settings.
- * BOLO_RECORDABLE=1 is set so the screenshots can see the overlay.
+ * ECHO_RECORDABLE=1 is set so the screenshots can see the overlay.
  */
 import { _electron as electron } from 'playwright';
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -22,12 +22,12 @@ import { SCRIPT, THEM_LINES, ME_LINES } from '../test/fixtures/script.ts';
 
 const repo = join(import.meta.dirname, '..');
 const electronPath = createRequire(import.meta.url)('electron');
-const home = mkdtempSync(join(tmpdir(), 'bolo-e2e-'));
+const home = mkdtempSync(join(tmpdir(), 'echo-e2e-'));
 const exportDir = join(home, 'exports');
 const contextDir = join(repo, 'demo-context');
 const shots = join(repo, 'test-results', 'e2e');
 
-// A calendar with one invite starting in three minutes (see "Start with Bolo" below).
+// A calendar with one invite starting in three minutes (see "Start with Echo" below).
 const icsTime = (ms) =>
   new Date(ms)
     .toISOString()
@@ -55,11 +55,11 @@ writeFileSync(
 );
 mkdirSync(shots, { recursive: true });
 
-// Electron's userData = <appData>/Bolo. Pre-seed settings so no dialogs block the run.
+// Electron's userData = <appData>/Echo. Pre-seed settings so no dialogs block the run.
 const appData = join(home, 'appdata');
-mkdirSync(join(appData, 'Bolo'), { recursive: true });
+mkdirSync(join(appData, 'Echo'), { recursive: true });
 writeFileSync(
-  join(appData, 'Bolo', 'settings.json'),
+  join(appData, 'Echo', 'settings.json'),
   JSON.stringify({
     audioMode: 'file',
     replaySpeed: 0.5, // slow enough to ask questions before the replay ends
@@ -124,17 +124,17 @@ const app = await electron.launch({
     ...process.env,
     // Set by editors that are themselves Electron apps; it would run our app as plain Node.
     ELECTRON_RUN_AS_NODE: undefined,
-    BOLO_USER_DATA: join(appData, 'Bolo'),
+    ECHO_USER_DATA: join(appData, 'Echo'),
     GNANI_API_KEY: 'test-key',
     GOOGLE_CLIENT_ID: 'mock-client',
     GOOGLE_CLIENT_SECRET: 'mock-secret',
-    BOLO_OAUTH_MOCK: oauthUrl,
-    BOLO_DETECT_FILE: detectFile,
+    ECHO_OAUTH_MOCK: oauthUrl,
+    ECHO_DETECT_FILE: detectFile,
     GNANI_STT_URL: sttUrl,
     LLM_BASE_URL: llmUrl,
     LLM_MODEL: 'mock-model',
     LLM_API_KEY: '',
-    BOLO_RECORDABLE: '1',
+    ECHO_RECORDABLE: '1',
   },
 });
 
@@ -188,7 +188,7 @@ try {
   check(isolated, 'renderer has no Node access (contextIsolation, no nodeIntegration)');
 
   const after = await page.evaluate(() =>
-    window.bolo.updateSettings({ exportDir: '/somewhere/else', contextDir: '/etc' }),
+    window.echo.updateSettings({ exportDir: '/somewhere/else', contextDir: '/etc' }),
   );
   check(
     after.exportDir === exportDir && after.contextDir === contextDir,
@@ -241,7 +241,7 @@ try {
   await page.locator('.events', { hasText: 'Mehta follow-up' }).waitFor();
   check(true, "today's meetings listed from the calendar file");
   await shot('2-context');
-  const state = await page.evaluate(() => window.bolo.getState());
+  const state = await page.evaluate(() => window.echo.getState());
   check(
     state.context.files.length === 3 && !JSON.stringify(state).includes('SP-EX-BL-5'),
     'three context files loaded; file contents stay in the main process',
@@ -304,8 +304,8 @@ try {
   check((await bounds()).height > 150, 'window grew to fit the panel');
 
   // A typed question, answered from the project notes.
-  await page.getByLabel('Ask Bolo').fill('what did we promise on delivery?');
-  await page.getByLabel('Ask Bolo').press('Enter');
+  await page.getByLabel('Ask Echo').fill('what did we promise on delivery?');
+  await page.getByLabel('Ask Echo').press('Enter');
   await page.getByText(/Delivery within 7 working days/).waitFor({ timeout: 8000 });
   await page.getByText('You asked: what did we promise on delivery?').waitFor();
   await page.locator('.answer .chip', { hasText: 'project-notes.md' }).waitFor();
@@ -313,8 +313,8 @@ try {
   await shot('5-typed-question');
 
   // A question the files cannot answer.
-  await page.getByLabel('Ask Bolo').fill('what is their GST number?');
-  await page.getByLabel('Ask Bolo').press('Enter');
+  await page.getByLabel('Ask Echo').fill('what is their GST number?');
+  await page.getByLabel('Ask Echo').press('Enter');
   await page.getByText('Answer · not in your files').waitFor({ timeout: 8000 });
   check(true, 'honest "not in your files" card');
   await shot('6-not-in-files');
@@ -327,7 +327,7 @@ try {
   await shot('6b-catch-up');
 
   // Screen question: the main process captures; the image goes only to the model.
-  await page.evaluate(() => window.bolo.askScreen());
+  await page.evaluate(() => window.echo.askScreen());
   await page.getByText('Answer · from your screen').waitFor({ timeout: 10000 });
   await page.locator('.answer pre.code', { hasText: 'def most_stocked' }).waitFor();
   check(true, 'screen answer shows its code as a code block');
@@ -378,7 +378,7 @@ try {
     check(!saved.includes('data:image'), 'no screenshot in the export');
   }
   // ---- Meeting library ----
-  const meetingsDir = join(appData, 'Bolo', 'meetings');
+  const meetingsDir = join(appData, 'Echo', 'meetings');
   const existingLibrary = app
     .windows()
     .find((w) => /^#(?:app|library)/.test(new URL(w.url()).hash));
@@ -419,7 +419,7 @@ try {
   await lib.getByText(THEM_LINES.question.text).waitFor();
   check(true, 'library shows the transcript');
 
-  // Name the other side, then let Bolo guess line by line.
+  // Name the other side, then let Echo guess line by line.
   await lib.getByPlaceholder(/Them — e.g./).fill('Mehta Hardware');
   await lib.getByPlaceholder(/Them — e.g./).press('Enter');
   check(
@@ -449,7 +449,7 @@ try {
   await lib.getByText(/^No meeting mentions all of that/).waitFor();
   check(true, 'search finds the meeting by a word and reports no match for others');
   const libTrusted = await lib.evaluate(() =>
-    window.bolo.updateSettings({ exportDir: '/elsewhere' }).then((s) => s.exportDir),
+    window.echo.updateSettings({ exportDir: '/elsewhere' }).then((s) => s.exportDir),
   );
   check(libTrusted === exportDir, 'library window cannot change the export folder either');
 
@@ -501,7 +501,7 @@ try {
   // Sign in to Google (mock provider): the account appears and its meeting is listed.
   await lib.getByRole('button', { name: 'Connect Google Calendar' }).click();
   await lib.getByText('krunal@example.com').first().waitFor({ timeout: 10000 });
-  const afterSignIn = await page.evaluate(() => window.bolo.getState());
+  const afterSignIn = await page.evaluate(() => window.echo.getState());
   const pricing = afterSignIn.calendar.events.find((e) => e.title === 'Pricing review');
   check(
     afterSignIn.integrations.accounts.length === 1 &&
@@ -513,14 +513,14 @@ try {
   check(
     !JSON.stringify(afterSignIn).includes('mock-access') &&
       !JSON.stringify(afterSignIn).includes('mock-refresh') &&
-      !readFileSync(join(appData, 'Bolo', 'accounts.bin'))
+      !readFileSync(join(appData, 'Echo', 'accounts.bin'))
         .toString('latin1')
         .includes('mock-refresh'),
     'tokens never reach a window and are encrypted on disk',
   );
   await themedShot(lib, '13-settings-google');
 
-  // Another app takes the microphone: the overlay offers to start Bolo.
+  // Another app takes the microphone: the overlay offers to start Echo.
   writeFileSync(detectFile, zoomOnMic);
   await page.getByText('Zoom call detected').waitFor({ timeout: 10000 });
   check(true, 'a Zoom call on the microphone is detected and offered');
@@ -531,15 +531,15 @@ try {
   check(true, 'the offer goes when Zoom lets go of the microphone');
 
   // A second meeting, started from the calendar: it takes the invite's title, people and
-  // agenda, and Bolo answers from the first meeting's minutes.
+  // agenda, and Echo answers from the first meeting's minutes.
   await page.getByRole('tab', { name: 'Context' }).click();
   await page
     .locator('.events li', { hasText: 'Mehta follow-up' })
     .getByRole('button', { name: 'Start' })
     .click();
   await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 5000 });
-  await page.getByLabel('Ask Bolo').fill('what did they want on whatsapp?');
-  await page.getByLabel('Ask Bolo').press('Enter');
+  await page.getByLabel('Ask Echo').fill('what did they want on whatsapp?');
+  await page.getByLabel('Ask Echo').press('Enter');
   await page.getByText('Answer · from past meetings').waitFor({ timeout: 8000 });
   await page.locator('.answer .chip-meeting', { hasText: 'Blue 5 litre stock and rate' }).waitFor();
   check(true, "a later meeting answers from the first meeting's minutes");

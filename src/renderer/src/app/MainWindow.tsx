@@ -3,12 +3,14 @@ import type { AppSection, AppState } from '../../../shared/ipc.ts';
 import type { Settings } from '../../../shared/settings.ts';
 import type { MeetingSummary } from '../../../shared/meeting.ts';
 import { formatClock } from '../../../shared/transcript/format.ts';
+import { initials } from '../components/Avatars.tsx';
 import { Icon } from '../components/Icon.tsx';
 import { Library } from '../library/Library.tsx';
 import { AskPage } from './AskPage.tsx';
 import { Home } from './Home.tsx';
 import { Onboarding } from './Onboarding.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
+import { TodoPage } from './TodoPage.tsx';
 import { parseRoute, routeHash, type AppRoute } from './routes.ts';
 import { onSettingsChanged, settingsChanged } from './settings-sync.ts';
 import { meetingSlug } from './presentation.ts';
@@ -23,6 +25,7 @@ export interface SettingsProps {
 
 const NAV = [
   ['home', 'Home', 'home'],
+  ['todo', 'To do', 'check'],
   ['meetings', 'Meetings', 'book'],
   ['ask', 'Ask', 'sparkle'],
   ['settings', 'Settings', 'user'],
@@ -39,6 +42,8 @@ export function MainWindow() {
   const [now, setNow] = useState(Date.now);
   const [stopping, setStopping] = useState(false);
   const [settingsAnchor, setSettingsAnchor] = useState('profile');
+  const [startMenu, setStartMenu] = useState(false);
+  const [creating, setCreating] = useState<'google' | 'microsoft' | null>(null);
   const [question, setQuestion] = useState<{ text: string; id: number } | null>(null);
   const questionId = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -47,19 +52,13 @@ export function MainWindow() {
   const [jump, setJump] = useState('');
   const [jumpOpen, setJumpOpen] = useState(false);
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
-  const [todo, setTodo] = useState(0);
-  const [sidebarError, setSidebarError] = useState(false);
-  const refreshSidebar = useCallback(async () => {
+  // For "Jump to" only; each page loads its own lists.
+  const refreshMeetings = useCallback(async () => {
     try {
-      const [recent, actions] = await Promise.all([
-        window.bolo.listMeetings(''),
-        window.bolo.listActionItems(),
-      ]);
+      const recent = await window.echo.listMeetings('');
       setMeetings(recent.sort((a, b) => b.startedAt - a.startedAt));
-      setTodo(actions.filter((a) => !a.done).length);
-      setSidebarError(false);
     } catch {
-      setSidebarError(true);
+      // Jump to still offers the sections.
     }
   }, []);
   const notify = useCallback<Notify>(
@@ -71,24 +70,24 @@ export function MainWindow() {
   }, []);
   const refresh = useCallback(async () => {
     try {
-      const next = await window.bolo.getState();
+      const next = await window.echo.getState();
       setApp(next);
       setStartedAt(next.sessionRunning ? (next.sessionStartedAt ?? Date.now()) : null);
       setLoadError('');
     } catch {
-      setLoadError('Bolo could not load. Please try again.');
+      setLoadError('Echo could not load. Please try again.');
     }
   }, []);
 
   useEffect(() => {
     void refresh();
-    void refreshSidebar();
+    void refreshMeetings();
     window.addEventListener('focus', refresh);
     const stopSettingsSync = onSettingsChanged(() => void refresh());
     const hashChanged = () => setRoute(parseRoute(location.hash));
     window.addEventListener('hashchange', hashChanged);
-    const off = window.bolo.onEvent((e) => {
-      if (e.type === 'meeting-updated' || e.type === 'meeting-deleted') void refreshSidebar();
+    const off = window.echo.onEvent((e) => {
+      if (e.type === 'meeting-updated' || e.type === 'meeting-deleted') void refreshMeetings();
       if (e.type === 'navigate') navigate(e.section, e.meetingId);
       if (e.type === 'open-meeting') navigate('meetings', e.id);
       if (e.type === 'meeting-deleted')
@@ -123,7 +122,7 @@ export function MainWindow() {
       window.removeEventListener('focus', refresh);
       window.removeEventListener('hashchange', hashChanged);
     };
-  }, [navigate, notify, refresh, refreshSidebar]);
+  }, [navigate, notify, refresh, refreshMeetings]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -143,12 +142,13 @@ export function MainWindow() {
 
   useEffect(() => {
     history.replaceState(null, '', routeHash(route));
-    document.title = `Bolo — ${NAV.find(([key]) => key === route.section)?.[1] ?? 'Home'}`;
+    document.title = `Echo — ${NAV.find(([key]) => key === route.section)?.[1] ?? 'Home'}`;
     heading.current?.focus();
   }, [route]);
+  // Every second for the call timer; otherwise often enough for "Upcoming" and the date.
   useEffect(() => {
-    if (!app?.sessionRunning) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), app?.sessionRunning ? 1000 : 30_000);
     return () => clearInterval(timer);
   }, [app?.sessionRunning]);
   useEffect(() => {
@@ -163,7 +163,7 @@ export function MainWindow() {
   const onChange = useCallback(
     async (patch: Partial<Settings>) => {
       try {
-        const settings = await window.bolo.updateSettings(patch);
+        const settings = await window.echo.updateSettings(patch);
         setApp((current) => (current ? { ...current, settings } : current));
         settingsChanged();
         return settings;
@@ -177,7 +177,7 @@ export function MainWindow() {
   const stop = async () => {
     setStopping(true);
     try {
-      const result = await window.bolo.stopSession();
+      const result = await window.echo.stopSession();
       notify(
         result.meetingId
           ? `Meeting saved.${result.writingMinutes ? ' Writing the minutes…' : ''}${result.error ? ` ${result.error}` : ''}`
@@ -189,6 +189,18 @@ export function MainWindow() {
       notify('Could not stop the meeting. Please try again.', true);
     } finally {
       setStopping(false);
+    }
+  };
+  const newMeeting = async (provider: 'google' | 'microsoft') => {
+    setStartMenu(false);
+    setCreating(provider);
+    try {
+      const r = await window.echo.createMeeting(provider);
+      notify(r.ok ? `Meeting link copied: ${r.url}. Echo is listening.` : r.error, !r.ok);
+    } catch {
+      notify('Could not create the meeting. Please try again.', true);
+    } finally {
+      setCreating(null);
     }
   };
   const ask = (text: string) => {
@@ -231,7 +243,7 @@ export function MainWindow() {
   if (!app || !settingsProps)
     return (
       <div className="app-loading" role="status">
-        {loadError || 'Getting Bolo ready…'}
+        {loadError || 'Getting Echo ready…'}
         {loadError && <button onClick={() => void refresh()}>Try again</button>}
       </div>
     );
@@ -242,74 +254,6 @@ export function MainWindow() {
         {toastView}
       </>
     );
-
-  const sidebarLinks = (
-    <>
-      <div className="sidebar-title">Your workspace</div>
-      <button className="sidebar-shortcut" onClick={() => navigate('ask')}>
-        <Icon name="threads" />
-        Ask
-      </button>
-      <button
-        className="sidebar-shortcut"
-        onClick={() => {
-          navigate('home');
-          requestAnimationFrame(() =>
-            document.getElementById('home-todos')?.scrollIntoView({ block: 'start' }),
-          );
-        }}
-      >
-        <Icon name="drafts" />
-        To do <span className="count">{todo}</span>
-      </button>
-      <div className="sidebar-section">
-        <span>Today</span>
-        <button
-          className="icon"
-          aria-label="Calendar settings"
-          onClick={() => {
-            setSettingsAnchor('calendar');
-            navigate('settings');
-          }}
-        >
-          <Icon name="plus" />
-        </button>
-      </div>
-      {app.calendar.events
-        .filter((e) => e.end > now)
-        .sort((a, b) => a.start - b.start)
-        .slice(0, 6)
-        .map((e) => (
-          <div className="sidebar-event" key={e.key}>
-            <span className={e.start - now <= 300000 && !e.allDay ? 'live-dot' : 'event-dot'} />
-            <span className="sidebar-event-text">
-              <time>
-                {e.allDay
-                  ? 'All day'
-                  : new Date(e.start).toLocaleTimeString('en-IN', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-              </time>
-              <span>{e.title}</span>
-            </span>
-            {!e.allDay && (
-              <button
-                className="small event-start"
-                disabled={app.sessionRunning}
-                onClick={() => window.bolo.requestStart(e.key)}
-                aria-label={`Start ${e.title}`}
-              >
-                Start
-              </button>
-            )}
-          </div>
-        ))}
-      {!app.calendar.events.some((e) => e.end > now) && (
-        <p className="sidebar-empty">No upcoming meetings.</p>
-      )}
-    </>
-  );
 
   return (
     <div className="app-shell">
@@ -326,9 +270,9 @@ export function MainWindow() {
       <header className="workspace-header">
         <div className="app-brand">
           <span className="brand-mark" aria-hidden>
-            B
+            E
           </span>
-          <span>Bolo</span>
+          <span>Echo</span>
         </div>
         <div
           className="jump-box"
@@ -412,7 +356,7 @@ export function MainWindow() {
               className="icon"
               aria-label={app.sessionPaused ? 'Resume' : 'Pause'}
               title={app.sessionPaused ? 'Resume' : 'Pause (off the record)'}
-              onClick={() => window.bolo.setPaused(!app.sessionPaused)}
+              onClick={() => window.echo.setPaused(!app.sessionPaused)}
             >
               <Icon name={app.sessionPaused ? 'play' : 'pause'} />
             </button>
@@ -430,7 +374,7 @@ export function MainWindow() {
       </header>
       <aside className="app-rail" aria-label="Workspace">
         <nav className="app-nav" aria-label="Main navigation">
-          {NAV.map(([section, label, icon]) => (
+          {NAV.filter(([section]) => section !== 'settings').map(([section, label, icon]) => (
             <button
               key={section}
               className={route.section === section ? 'on' : ''}
@@ -440,61 +384,88 @@ export function MainWindow() {
               onClick={() => navigate(section)}
             >
               <Icon name={icon} size={23} />
-              <span>{section === 'settings' ? 'You' : label}</span>
+              <span>{label}</span>
             </button>
           ))}
         </nav>
-        <span className="rail-profile" title={app.settings.myName || 'Your workspace'}>
-          {(app.settings.myName || 'B').charAt(0).toUpperCase()}
-        </span>
+        <button
+          className={`rail-profile ${route.section === 'settings' ? 'on' : ''}`}
+          title={app.settings.myName || 'Your workspace'}
+          aria-label="Your profile"
+          aria-current={route.section === 'settings' ? 'page' : undefined}
+          onClick={() => {
+            setSettingsAnchor('profile');
+            navigate('settings');
+            requestAnimationFrame(() =>
+              document.getElementById('settings-profile')?.scrollIntoView({ block: 'start' }),
+            );
+          }}
+        >
+          {Array.from(initials(app.settings.myName || 'E'))[0]}
+        </button>
       </aside>
-      {route.section !== 'meetings' && (
-        <aside className="workspace-sidebar" aria-label="Your conversations">
-          {sidebarLinks}
-          <div className="sidebar-section">
-            <span>Meetings</span>
-            <button
-              className="icon"
-              aria-label="Start another meeting"
-              disabled={app.sessionRunning}
-              onClick={() => window.bolo.requestStart()}
-            >
-              <Icon name="plus" />
-            </button>
-          </div>
-          <div className="sidebar-meetings">
-            {meetings.map((m) => (
-              <button
-                key={m.id}
-                className={`channel-row ${m.minutes === 'writing' ? 'unread' : ''}`}
-                title={m.title}
-                onClick={() => navigate('meetings', m.id)}
-              >
-                <Icon name="hash" />
-                <span>{meetingSlug(m.title)}</span>
-                {m.minutes === 'writing' && <span className="live-dot" />}
-              </button>
-            ))}
-          </div>
-          {sidebarError && (
-            <button className="link sidebar-empty" onClick={() => void refreshSidebar()}>
-              Retry loading meetings
-            </button>
-          )}
-          {!meetings.length && !sidebarError && (
-            <p className="sidebar-empty">Your conversations will live here.</p>
-          )}
-        </aside>
-      )}
-      <button
-        className="start-meeting"
-        disabled={app.sessionRunning}
-        title={app.sessionRunning ? 'A meeting is already running' : 'Start a meeting'}
-        onClick={() => window.bolo.requestStart()}
-        aria-label="Start a meeting"
+      <div
+        className="start-box"
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setStartMenu(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setStartMenu(false);
+        }}
       >
-        <Icon name="compose" size={25} />
-      </button>
+        <button
+          className="start-meeting"
+          disabled={app.sessionRunning || !!creating}
+          title={app.sessionRunning ? 'A meeting is already running' : 'Start a meeting'}
+          aria-label="Start a meeting"
+          aria-haspopup="menu"
+          aria-expanded={startMenu}
+          onClick={() => setStartMenu((open) => !open)}
+        >
+          {creating ? <span className="spinner" /> : <Icon name="play" size={22} />}
+        </button>
+        {startMenu && !app.sessionRunning && (
+          <div className="start-menu" role="menu" aria-label="Start a meeting">
+            <button
+              role="menuitem"
+              onClick={() => {
+                setStartMenu(false);
+                window.echo.requestStart();
+              }}
+            >
+              <Icon name="play" size={14} />
+              <span>
+                Start listening
+                <small>Echo listens to the call you're already in</small>
+              </span>
+            </button>
+            {(['google', 'microsoft'] as const).map((provider) => {
+              const connected = app.integrations.accounts.some((a) => a.provider === provider);
+              const name = provider === 'google' ? 'Google Meet' : 'Teams meeting';
+              return (
+                <button
+                  key={provider}
+                  role="menuitem"
+                  disabled={!connected}
+                  onClick={() => void newMeeting(provider)}
+                >
+                  <span className={`provider-mark provider-${provider}`} aria-hidden>
+                    {provider === 'google' ? 'G' : 'M'}
+                  </span>
+                  <span>
+                    New {name}
+                    <small>
+                      {connected
+                        ? 'Creates the link, opens it and starts listening'
+                        : `Connect ${provider === 'google' ? 'Google' : 'Microsoft'} in You → Calendar & accounts`}
+                    </small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
       <main className={`app-content section-${route.section}`} id="app-content">
         <header className="section-header">
           <h1 ref={heading} tabIndex={-1}>
@@ -512,7 +483,7 @@ export function MainWindow() {
                   month: 'long',
                 })
               : route.section === 'ask'
-                ? 'A thread with Bolo'
+                ? 'A thread with Echo'
                 : 'Your workspace'}
           </span>
         </header>
@@ -528,9 +499,14 @@ export function MainWindow() {
             notify={notify}
           />
         )}
+        {route.section === 'todo' && (
+          <TodoPage onMeeting={(id) => navigate('meetings', id)} notify={notify} />
+        )}
         {route.section === 'meetings' && (
           <Library
-            sidebarLinks={sidebarLinks}
+            upcoming={app.calendar.events
+              .filter((e) => e.end > now)
+              .sort((a, b) => a.start - b.start)}
             running={app.sessionRunning}
             meetingId={route.meetingId}
             onSelect={(id) => navigate('meetings', id)}

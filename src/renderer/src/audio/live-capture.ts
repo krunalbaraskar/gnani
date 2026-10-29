@@ -122,7 +122,7 @@ export class LiveCapture implements AudioSourceController {
   private wire(speaker: Speaker, stream: MediaStream): void {
     const ctx = this.ctx!;
     const source = ctx.createMediaStreamSource(stream);
-    const node = new AudioWorkletNode(ctx, 'bolo-pcm', {
+    const node = new AudioWorkletNode(ctx, 'echo-pcm', {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [1],

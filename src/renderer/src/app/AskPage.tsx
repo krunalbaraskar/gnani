@@ -44,7 +44,7 @@ export function AskPage({
     setDraft('');
     stick.current = true;
     try {
-      const result = await window.bolo.askMeetings(question, id);
+      const result = await window.echo.askMeetings(question, id);
       setTurns((t) =>
         t.map((turn) =>
           turn.id === id
@@ -65,7 +65,7 @@ export function AskPage({
 
   useEffect(
     () =>
-      window.bolo.onEvent((event) => {
+      window.echo.onEvent((event) => {
         if (event.type === 'ask-progress')
           setTurns((t) =>
             t.map((turn) =>
@@ -153,10 +153,10 @@ export function AskPage({
                   </div>
                 </div>
                 <div className="ask-bot-post">
-                  <Avatar name="Bolo" />
+                  <Avatar name="Echo" />
                   <div className="message-body">
                     <header className="message-header">
-                      <strong>Bolo</strong>
+                      <strong>Echo</strong>
                       <span className="app-tag">APP</span>
                       <time className="when">
                         {new Date(turn.at).toLocaleTimeString('en-IN', {
@@ -224,7 +224,7 @@ export function AskPage({
           <input
             ref={input}
             aria-label="Ask your meetings"
-            placeholder="Message Bolo about your meetings"
+            placeholder="Message Echo about your meetings"
             value={draft}
             maxLength={1000}
             onChange={(e) => setDraft(e.target.value)}
@@ -245,7 +245,7 @@ export function AskPage({
         </form>
         <p className="muted small" role="status">
           {busy
-            ? 'Bolo is answering…'
+            ? 'Echo is answering…'
             : 'Relevant parts of your meetings are sent to your AI model. Check answers before sharing.'}
         </p>
       </div>

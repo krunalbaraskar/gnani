@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import { MockGnaniServer } from '../test/mock/mock-gnani-server.ts';
 
 const repo = join(import.meta.dirname, '..');
-const userData = mkdtempSync(join(tmpdir(), 'bolo-live-'));
+const userData = mkdtempSync(join(tmpdir(), 'echo-live-'));
 writeFileSync(
   join(userData, 'settings.json'),
   JSON.stringify({ audioMode: 'live', consentAcknowledged: true, consentVersion: 2 }),
@@ -29,8 +29,8 @@ const app = await electron.launch({
   env: {
     ...process.env,
     ELECTRON_RUN_AS_NODE: undefined,
-    BOLO_USER_DATA: userData,
-    BOLO_RECORDABLE: '1',
+    ECHO_USER_DATA: userData,
+    ECHO_RECORDABLE: '1',
     GNANI_API_KEY: 'test-key',
     GNANI_STT_URL: sttUrl,
   },
@@ -41,7 +41,7 @@ try {
   const notices = [];
   await page.exposeFunction('__notice', (m) => notices.push(m));
   await page.evaluate(() =>
-    window.bolo.onEvent((e) => e.type === 'notice' && window.__notice(e.message)),
+    window.echo.onEvent((e) => e.type === 'notice' && window.__notice(e.message)),
   );
   await page.getByRole('button', { name: 'Start' }).click();
   await page.getByRole('status', { name: 'Listening' }).waitFor({ timeout: 10000 });

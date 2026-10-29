@@ -10,7 +10,7 @@ export interface DetectorOptions {
   enabled: () => boolean;
   onChange: (meeting: DetectedMeeting | null) => void;
   log: Logger;
-  /** Our own executable, which uses the microphone during a Bolo call. */
+  /** Our own executable, which uses the microphone during a Echo call. */
   selfPaths: string[];
   /** Development and tests only: read this file instead of the registry. */
   fakeRegistryFile?: string;

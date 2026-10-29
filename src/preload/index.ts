@@ -1,8 +1,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import { AUDIO_PORT_MESSAGE, IPC, type BoloEvent } from '../shared/ipc.ts';
-import type { BoloApi } from './api.ts';
+import { AUDIO_PORT_MESSAGE, IPC, type EchoEvent } from '../shared/ipc.ts';
+import type { EchoApi } from './api.ts';
 
-const api: BoloApi = {
+const api: EchoApi = {
   getState: () => ipcRenderer.invoke(IPC.getState),
   updateSettings: (patch) => ipcRenderer.invoke(IPC.updateSettings, patch),
   startSession: (eventKey) => ipcRenderer.invoke(IPC.startSession, eventKey),
@@ -28,8 +28,13 @@ const api: BoloApi = {
   showOverlayPanel: (panel) => ipcRenderer.send(IPC.showOverlayPanel, panel),
   connectAccount: (provider) => ipcRenderer.invoke(IPC.connectAccount, provider),
   disconnectAccount: (id) => ipcRenderer.invoke(IPC.disconnectAccount, id),
+  createMeeting: (provider) => ipcRenderer.invoke(IPC.createMeeting, provider),
   listActionItems: () => ipcRenderer.invoke(IPC.listActionItems),
   toggleActionItem: (id, index, done) => ipcRenderer.invoke(IPC.toggleActionItem, id, index, done),
+  listTodos: () => ipcRenderer.invoke(IPC.listTodos),
+  addTodo: (text) => ipcRenderer.invoke(IPC.addTodo, text),
+  setTodoDone: (id, done) => ipcRenderer.invoke(IPC.setTodoDone, id, done),
+  deleteTodo: (id) => ipcRenderer.invoke(IPC.deleteTodo, id),
   listMeetings: (query) => ipcRenderer.invoke(IPC.listMeetings, query),
   getMeeting: (id) => ipcRenderer.invoke(IPC.getMeeting, id),
   updateMeeting: (id, patch) => ipcRenderer.invoke(IPC.updateMeeting, id, patch),
@@ -53,10 +58,10 @@ const api: BoloApi = {
     );
   },
   onEvent: (listener) => {
-    const handler = (_e: IpcRendererEvent, event: BoloEvent) => listener(event);
+    const handler = (_e: IpcRendererEvent, event: EchoEvent) => listener(event);
     ipcRenderer.on(IPC.event, handler);
     return () => ipcRenderer.removeListener(IPC.event, handler);
   },
 };
 
-contextBridge.exposeInMainWorld('bolo', api);
+contextBridge.exposeInMainWorld('echo', api);

@@ -9,7 +9,7 @@ import type { Plugin } from 'vite';
  */
 function devOnlyRelaxCsp(): Plugin {
   return {
-    name: 'bolo-dev-relax-csp',
+    name: 'echo-dev-relax-csp',
     apply: 'serve',
     transformIndexHtml: (html) =>
       html.replace(/<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>/, ''),

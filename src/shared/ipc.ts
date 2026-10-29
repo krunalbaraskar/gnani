@@ -5,56 +5,63 @@ import type {
   ConnectResult,
   DetectedMeeting,
   IntegrationsView,
+  NewMeetingResult,
+  TodoItem,
 } from './integrations.ts';
 import type { MeetingSummary, MinutesProgressView } from './meeting.ts';
 import type { Settings } from './settings.ts';
 import type { Speaker, TranscriptSegment } from './transcript/types.ts';
 
 export const IPC = {
-  getState: 'bolo:get-state',
-  updateSettings: 'bolo:update-settings',
-  startSession: 'bolo:start-session',
-  stopSession: 'bolo:stop-session',
-  requestSuggestion: 'bolo:request-suggestion',
-  chooseExportDir: 'bolo:choose-export-dir',
-  openExportDir: 'bolo:open-export-dir',
-  readDemoAudio: 'bolo:read-demo-audio',
-  chooseContextDir: 'bolo:choose-context-dir',
-  reloadContext: 'bolo:reload-context',
-  ask: 'bolo:ask',
-  askScreen: 'bolo:ask-screen',
-  requestMeaning: 'bolo:request-meaning',
-  catchUp: 'bolo:catch-up',
-  askMeetings: 'bolo:ask-meetings',
-  guessSpeakers: 'bolo:guess-speakers',
-  chooseCalendarFile: 'bolo:choose-calendar-file',
-  refreshCalendar: 'bolo:refresh-calendar',
-  openJoinLink: 'bolo:open-join-link',
-  setPaused: 'bolo:set-paused',
-  openLibrary: 'bolo:open-library',
-  openApp: 'bolo:open-app',
-  requestStart: 'bolo:request-start',
-  showOverlayPanel: 'bolo:show-overlay-panel',
-  connectAccount: 'bolo:connect-account',
-  disconnectAccount: 'bolo:disconnect-account',
-  listActionItems: 'bolo:list-action-items',
-  toggleActionItem: 'bolo:toggle-action-item',
-  listMeetings: 'bolo:list-meetings',
-  getMeeting: 'bolo:get-meeting',
-  updateMeeting: 'bolo:update-meeting',
-  deleteMeeting: 'bolo:delete-meeting',
-  writeMinutes: 'bolo:write-minutes',
-  cancelMinutes: 'bolo:cancel-minutes',
-  exportMeeting: 'bolo:export-meeting',
-  copyMinutes: 'bolo:copy-minutes',
-  emailMinutes: 'bolo:email-minutes',
-  window: 'bolo:window',
-  audioPort: 'bolo:audio-port',
-  event: 'bolo:event',
+  getState: 'echo:get-state',
+  updateSettings: 'echo:update-settings',
+  startSession: 'echo:start-session',
+  stopSession: 'echo:stop-session',
+  requestSuggestion: 'echo:request-suggestion',
+  chooseExportDir: 'echo:choose-export-dir',
+  openExportDir: 'echo:open-export-dir',
+  readDemoAudio: 'echo:read-demo-audio',
+  chooseContextDir: 'echo:choose-context-dir',
+  reloadContext: 'echo:reload-context',
+  ask: 'echo:ask',
+  askScreen: 'echo:ask-screen',
+  requestMeaning: 'echo:request-meaning',
+  catchUp: 'echo:catch-up',
+  askMeetings: 'echo:ask-meetings',
+  guessSpeakers: 'echo:guess-speakers',
+  chooseCalendarFile: 'echo:choose-calendar-file',
+  refreshCalendar: 'echo:refresh-calendar',
+  openJoinLink: 'echo:open-join-link',
+  setPaused: 'echo:set-paused',
+  openLibrary: 'echo:open-library',
+  openApp: 'echo:open-app',
+  requestStart: 'echo:request-start',
+  showOverlayPanel: 'echo:show-overlay-panel',
+  connectAccount: 'echo:connect-account',
+  disconnectAccount: 'echo:disconnect-account',
+  createMeeting: 'echo:create-meeting',
+  listActionItems: 'echo:list-action-items',
+  toggleActionItem: 'echo:toggle-action-item',
+  listTodos: 'echo:list-todos',
+  addTodo: 'echo:add-todo',
+  setTodoDone: 'echo:set-todo-done',
+  deleteTodo: 'echo:delete-todo',
+  listMeetings: 'echo:list-meetings',
+  getMeeting: 'echo:get-meeting',
+  updateMeeting: 'echo:update-meeting',
+  deleteMeeting: 'echo:delete-meeting',
+  writeMinutes: 'echo:write-minutes',
+  cancelMinutes: 'echo:cancel-minutes',
+  exportMeeting: 'echo:export-meeting',
+  copyMinutes: 'echo:copy-minutes',
+  emailMinutes: 'echo:email-minutes',
+  window: 'echo:window',
+  audioPort: 'echo:audio-port',
+  event: 'echo:event',
 } as const;
 
 /** Message the preload posts to the page to hand over a frame port. */
-export const AUDIO_PORT_MESSAGE = 'bolo:audio-port';
+export const AUDIO_PORT_MESSAGE = 'echo:audio-port';
 
 export interface LanguageOption {
   code: string;
@@ -75,7 +82,7 @@ export interface ContextView {
 /**
  * Whether other people can see the overlay when the screen is shared:
  * hidden = checked by hand on this platform and OS build · unverified = may be visible ·
- * demo = protection deliberately off so the overlay can be recorded (BOLO_RECORDABLE=1).
+ * demo = protection deliberately off so the overlay can be recorded (ECHO_RECORDABLE=1).
  */
 export type ShareProtection = 'hidden' | 'unverified' | 'demo';
 
@@ -110,7 +117,7 @@ export interface AppState {
 export type OverlayPanel = 'live' | 'transcript' | 'context' | 'settings';
 
 /** Sections of the main window. */
-export type AppSection = 'home' | 'meetings' | 'ask' | 'settings';
+export type AppSection = 'home' | 'todo' | 'meetings' | 'ask' | 'settings';
 
 export interface SuggestionView {
   id: string;
@@ -139,7 +146,7 @@ export interface SttStatusView {
   droppedFrames?: number;
 }
 
-export type BoloEvent =
+export type EchoEvent =
   | { type: 'segment'; segment: TranscriptSegment }
   | { type: 'segment-removed'; id: string; reason: 'echo' }
   | { type: 'segment-meaning'; id: string; meaning: string }
@@ -172,7 +179,7 @@ export type BoloEvent =
   /** Overlay only: open the panel at this tab (e.g. Settings → Audio from the main window). */
   | { type: 'overlay-panel'; panel: OverlayPanel };
 
-export type { ActionItemView, ConnectResult };
+export type { ActionItemView, ConnectResult, NewMeetingResult, TodoItem };
 
 export type StartResult = { ok: true } | { ok: false; error: string };
 

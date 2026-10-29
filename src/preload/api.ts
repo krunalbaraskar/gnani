@@ -1,14 +1,16 @@
 import type {
   AppState,
-  BoloEvent,
+  EchoEvent,
   ContextView,
   DemoAudio,
   ExportFormat,
   ExportResult,
   ActionItemView,
+  TodoItem,
   AppSection,
   OverlayPanel,
   ConnectResult,
+  NewMeetingResult,
   StartResult,
   StopResult,
   WindowCommand,
@@ -23,8 +25,8 @@ import type { CalendarView } from '../shared/calendar.ts';
 import type { Settings } from '../shared/settings.ts';
 import type { Speaker } from '../shared/transcript/types.ts';
 
-/** The whole surface the renderer can reach, exposed as window.bolo. */
-export interface BoloApi {
+/** The whole surface the renderer can reach, exposed as window.echo. */
+export interface EchoApi {
   getState(): Promise<AppState>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
   /** `eventKey`: start the call for this calendar meeting (its title, people and agenda). */
@@ -69,10 +71,21 @@ export interface BoloApi {
    */
   connectAccount(provider: 'google' | 'microsoft'): Promise<ConnectResult>;
   disconnectAccount(accountId: string): Promise<void>;
+  /**
+   * Makes a new Google Meet (google) or Teams (microsoft) meeting on the connected account,
+   * opens it in the browser, copies the link and starts listening.
+   */
+  createMeeting(provider: 'google' | 'microsoft'): Promise<NewMeetingResult>;
   /** Action items from all meetings' minutes, open ones first, newest meeting first. */
   listActionItems(): Promise<ActionItemView[]>;
   /** Ticks or unticks one action item in that meeting's minutes. */
   toggleActionItem(meetingId: string, index: number, done: boolean): Promise<boolean>;
+  /** To-dos the user added by hand, open ones first. */
+  listTodos(): Promise<TodoItem[]>;
+  /** Null when the text is empty. */
+  addTodo(text: string): Promise<TodoItem | null>;
+  setTodoDone(id: string, done: boolean): Promise<boolean>;
+  deleteTodo(id: string): Promise<boolean>;
   listMeetings(query: string): Promise<MeetingSummary[]>;
   getMeeting(id: string): Promise<MeetingDetail | null>;
   updateMeeting(id: string, patch: MeetingPatch): Promise<MeetingDetail | null>;
@@ -94,5 +107,5 @@ export interface BoloApi {
    * receives the other end as a window "message" event (see AUDIO_PORT_MESSAGE).
    */
   openAudioPort(speaker: Speaker): void;
-  onEvent(listener: (e: BoloEvent) => void): () => void;
+  onEvent(listener: (e: EchoEvent) => void): () => void;
 }

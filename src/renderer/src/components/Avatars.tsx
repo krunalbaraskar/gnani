@@ -15,12 +15,13 @@ export function Avatars({ people }: { people: readonly string[] }) {
     </span>
   );
 }
-function initials(name: string) {
+/** Up to two initials; whole characters, so an emoji or accented letter never splits. */
+export function initials(name: string) {
   return name
     .split(/[\s@._-]+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((s) => s[0])
+    .map((s) => Array.from(s)[0])
     .join('')
     .toLocaleUpperCase();
 }

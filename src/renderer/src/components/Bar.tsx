@@ -87,9 +87,9 @@ export function Bar({
     <header className="bar">
       <span className="brand">
         <span className="brand-tile" aria-hidden>
-          B
+          E
         </span>{' '}
-        Bolo
+        Echo
       </span>
       {state.running ? (
         <button className="bar-main stop" onClick={onStop} title="Stop the call and save">
@@ -108,7 +108,7 @@ export function Bar({
       {state.running && (
         <button
           className={`icon ${state.paused ? 'on' : ''}`}
-          onClick={() => window.bolo.setPaused(!state.paused)}
+          onClick={() => window.echo.setPaused(!state.paused)}
           aria-pressed={state.paused}
           aria-label={state.paused ? 'Resume' : 'Pause'}
           title={

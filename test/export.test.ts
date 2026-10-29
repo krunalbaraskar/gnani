@@ -28,7 +28,7 @@ const record: SessionRecord = {
 
 describe('session export', () => {
   it('names files by local start time', () => {
-    expect(exportBaseName(T0)).toBe('bolo-session-2026-10-04_14-05-09');
+    expect(exportBaseName(T0)).toBe('echo-session-2026-10-04_14-05-09');
   });
 
   it('renders Markdown with metadata, context and interleaved suggestions', () => {

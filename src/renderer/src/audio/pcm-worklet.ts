@@ -21,7 +21,7 @@ export interface WorkletMessage {
   levelDb?: number;
 }
 
-class BoloPcmProcessor extends AudioWorkletProcessor {
+class EchoPcmProcessor extends AudioWorkletProcessor {
   private readonly encoder = new FrameEncoder(sampleRate);
   private stopped = false;
   private count = 0;
@@ -48,4 +48,4 @@ class BoloPcmProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('bolo-pcm', BoloPcmProcessor);
+registerProcessor('echo-pcm', EchoPcmProcessor);

@@ -1,11 +1,11 @@
-# Bolo — the meeting buddy that knows your work
+# Echo — the meeting buddy that knows your work
 
 A client asks "how much stock do you have of the blue 5 litre, and what's the bulk rate?"
 A couple of seconds later the exact figure from **your own files** is on your screen, with
 the file it came from, in a glass bar that **does not appear in your screen share**. When
 the meeting ends, the **minutes** are already written: summary, decisions, action items.
 
-Bolo is a small Windows desktop app that sits on top of your Zoom, Meet or Teams call. It
+Echo is a small Windows desktop app that sits on top of your Zoom, Meet or Teams call. It
 transcribes **both sides** of the conversation live with **Gnani's speech-to-text**, which
 handles Hindi, Tamil and other Indian languages and code-mixed speech like Hinglish.
 
@@ -15,7 +15,7 @@ answers when you ask · **Active**: also answers their questions on its own), wi
 
 - **Answers from your files and your past meetings.** Point it at a folder with your stock
   sheet, price list or project notes; the minutes of every earlier meeting count too. When
-  they ask a question, Bolo answers from those and names the file or meeting. If the fact
+  they ask a question, Echo answers from those and names the file or meeting. If the fact
   is not there, it says so; it does not make up a number.
 - **Catches you up.** Drifted off? One hotkey gives you the last 10 minutes in a few
   bullets, starting with anything they asked you.
@@ -33,23 +33,23 @@ answers when you ask · **Active**: also answers their questions on its own), wi
 - **Minutes of the meeting (MOM).** Summary, key points, decisions, action items with
   owners, open questions and next steps, written from the transcript and your notes. Any
   figure nobody said in the meeting is flagged for you to check.
-- **A meeting library.** Every meeting with its transcript, Bolo's answers, your notes and
+- **A meeting library.** Every meeting with its transcript, Echo's answers, your notes and
   the minutes, searchable across all meetings. Edit the minutes, then copy them for email
   or chat, open them in your mail app, or save them as PDF or Markdown.
 - **Ask your meetings.** "What rate did we agree with Mehta?" is answered from all your
   saved meetings, with a link to the one it came from.
-- **Who said what.** Name the other side, or let Bolo suggest a name for each line from
+- **Who said what.** Name the other side, or let Echo suggest a name for each line from
   the conversation ("Thanks, Rohan"). It only uses names that were invited or actually
   said, and marks its guesses until you confirm them.
 
-**Your calendar**, read-only from its private iCal link or an `.ics` file: Bolo offers
-"Mehta follow-up · starts in 3 min · Start with Bolo", and a meeting started that way
+**Your calendar**, read-only from its private iCal link or an `.ics` file: Echo offers
+"Mehta follow-up · starts in 3 min · Start with Echo", and a meeting started that way
 takes the invite's title, people and agenda into its answers and minutes.
 
 Built for sales reps, small business owners, brokers, agents and anyone who takes meetings
 in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 
-<p align="center"><img src="docs/overlay.png" width="620" alt="Bolo overlay during a call: the client's Hinglish question, its meaning in English, and an answer taken from inventory.csv and price-list.md"></p>
+<p align="center"><img src="docs/overlay.png" width="620" alt="Echo overlay during a call: the client's Hinglish question, its meaning in English, and an answer taken from inventory.csv and price-list.md"></p>
 
 <sub>Screenshot from the automated end-to-end test on Windows, with synthetic data.</sub>
 
@@ -60,7 +60,7 @@ in Indian languages. Built for Gnani AI's Great Indian AI Internship Challenge.
 - [Try it with no keys](#try-it-with-no-keys)
 - [Try it free, without a Gnani key](#try-it-free-without-a-gnani-key)
 - [Environment variables](#environment-variables)
-- [Using Bolo](#using-bolo)
+- [Using Echo](#using-echo)
 - [Connect your calendar](#connect-your-calendar)
 - [How answers are kept honest](#how-answers-are-kept-honest)
 - [Architecture](#architecture)
@@ -94,7 +94,7 @@ Checked on Windows 11 (build 26100) on 2026-10-09.
 | Windows installer (NSIS)                                          | Config done; build the `.exe` with `npm run dist:win`                                                                                                                                                                                                     |
 
 Manual test plan: [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md). Design record:
-[docs/designs/bolo-context-copilot.md](docs/designs/bolo-context-copilot.md).
+[docs/designs/echo-context-copilot.md](docs/designs/echo-context-copilot.md).
 
 ## Quick start (Windows)
 
@@ -110,7 +110,7 @@ npm run dev
 If the app does not start and says Electron failed to install, your npm is set to skip
 install scripts. Run `node node_modules/electron/install.js` once.
 
-Bolo appears as a slim bar at the top-centre of the screen. On first launch it shows a
+Echo appears as a slim bar at the top-centre of the screen. On first launch it shows a
 consent notice. Then:
 
 1. Open **Context**, choose the folder with your files.
@@ -154,17 +154,17 @@ npm run dev
 
 **With real speech and the real Gnani API:** `npm run demo-audio` creates
 `demo-audio\them.wav` and `demo-audio\me.wav`, the same kind of call spoken by Gnani's
-own TTS voices, with three questions the demo files answer. In Bolo, **Settings → Audio →
+own TTS voices, with three questions the demo files answer. In Echo, **Settings → Audio →
 Demo** loads them. Use 1× speed against the real API: Gnani wants real-time cadence.
 
 **Recording a demo video:** a protected overlay does not show up in a screen recording.
-Set `BOLO_RECORDABLE=1` to turn protection off while you record. The bar then says so in
+Set `ECHO_RECORDABLE=1` to turn protection off while you record. The bar then says so in
 amber. To show the hiding itself, record a second clip of a real screen share with
 protection on.
 
 ## Try it free, without a Gnani key
 
-For testing before you have Gnani credits, Bolo can use any OpenAI-compatible
+For testing before you have Gnani credits, Echo can use any OpenAI-compatible
 `/audio/transcriptions` endpoint instead. **Groq's free tier** covers both halves with one
 key and no card: Whisper for speech-to-text, and a chat model for answers. Create a key at
 console.groq.com, then put this in `.env`:
@@ -183,7 +183,7 @@ less: Groq's free chat limit is about 8,000 tokens a minute.
 
 What changes compared with Gnani:
 
-- **Lines appear after each pause, not while you speak.** Whisper takes whole clips, so Bolo
+- **Lines appear after each pause, not while you speak.** Whisper takes whole clips, so Echo
   cuts the audio at pauses (0.7 s) and sends each piece. Expect roughly a second more delay.
 - **Limits.** Groq's free tier (checked October 2026, shared by all keys in one account):
   Whisper 20 requests a minute and about 8 hours of audio a day, chat about 1,000
@@ -200,8 +200,8 @@ key empty. For the submission and demo video, switch back to Gnani by removing
 ## Environment variables
 
 Keys are read **only by the Electron main process**, never sent to the UI and never
-logged. Bolo looks for them in this order: real environment variables, then `.env` in the
-folder you start Bolo from (development), then `%APPDATA%\Bolo\.env` (installed app).
+logged. Echo looks for them in this order: real environment variables, then `.env` in the
+folder you start Echo from (development), then `%APPDATA%\Echo\.env` (installed app).
 
 | Variable               | Required    | Meaning                                                                                                                              |
 | ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -211,9 +211,9 @@ folder you start Bolo from (development), then `%APPDATA%\Bolo\.env` (installed 
 | `LLM_MODEL`            | for answers | e.g. `gpt-4o-mini`, `llama3.2`                                                                                                       |
 | `LLM_API_KEY`          | depends     | Bearer token; leave empty for local servers                                                                                          |
 | `LLM_REASONING_EFFORT` | no          | For thinking models: `low` (or `none` on Gemini 2.5 Flash) makes them answer in seconds instead of 20 s or more. Not sent when empty |
-| `BOLO_OPAQUE_WINDOW`   | no          | `1` = opaque overlay, for GPUs that render transparent windows badly                                                                 |
-| `BOLO_RECORDABLE`      | no          | `1` = demo mode: the overlay is visible in screen recordings and shares                                                              |
-| `BOLO_USER_DATA`       | no          | Settings folder to use instead of `%APPDATA%\Bolo` (the end-to-end tests use a throwaway one)                                        |
+| `ECHO_OPAQUE_WINDOW`   | no          | `1` = opaque overlay, for GPUs that render transparent windows badly                                                                 |
+| `ECHO_RECORDABLE`      | no          | `1` = demo mode: the overlay is visible in screen recordings and shares                                                              |
+| `ECHO_USER_DATA`       | no          | Settings folder to use instead of `%APPDATA%\Echo` (the end-to-end tests use a throwaway one)                                        |
 | `GNANI_TTS_URL`        | no          | Override the TTS endpoint used by `npm run demo-audio`                                                                               |
 | `STT_PROVIDER`         | no          | `whisper` = use a Whisper endpoint instead of Gnani, for testing (see above). Default `gnani`                                        |
 | `WHISPER_BASE_URL`     | no          | Default `https://api.groq.com/openai/v1`. Any OpenAI-compatible `/audio/transcriptions` server                                       |
@@ -227,7 +227,7 @@ override the `.env` defaults. Keys can only come from the environment. A base UR
 into Settings must be `https`, or plain `http` to this computer or the local network: the
 key, the transcript and your files travel in that request.
 
-## Using Bolo
+## Using Echo
 
 | Hotkey             | Action                                          |
 | ------------------ | ----------------------------------------------- |
@@ -253,7 +253,7 @@ menu. The window is exactly as tall as what is open, and the bar is the drag han
 Nothing said meanwhile is heard or saved; the transcript marks the gap.
 
 **After the meeting.** Stop saves the meeting to the library on this computer
-(`%APPDATA%\Bolo\meetings`) and, with an AI model set, writes the minutes in the
+(`%APPDATA%\Echo\meetings`) and, with an AI model set, writes the minutes in the
 background. Click the "Meeting saved" notice, or **⋯ → Meetings**, to open the library.
 Set **Context → My name** so the minutes say who you are. Add notes in **Notes & answers**
 and press **Rewrite** to include them. Turn automatic minutes off under **Settings → After
@@ -273,8 +273,8 @@ as क्रुणाल), so add that spelling as a watch word. Matching is pla
 **Calendar.** In **Context → Calendar**, paste your calendar's private iCal link
 (Google Calendar: Settings → your calendar → _Secret address in iCal format_; Outlook:
 Settings → Calendar → Shared calendars → _Publish a calendar_ → ICS) or choose an `.ics`
-file. Bolo reads it every 10 minutes, never writes to it, and lists today's and
-tomorrow's meetings. Ten minutes before one starts, a strip offers **Start with Bolo**
+file. Echo reads it every 10 minutes, never writes to it, and lists today's and
+tomorrow's meetings. Ten minutes before one starts, a strip offers **Start with Echo**
 (and **Join** for a Meet, Zoom or Teams link). A call started that way is saved under the
 invite's title; the invited people and the invite's description (as the agenda) go into
 answers and minutes; and a 1:1 invite names "Them" for you. Recurring meetings, time
@@ -306,13 +306,13 @@ running.
 | Answer · checking          | Still arriving. Nothing is claimed yet                                                 |
 | Answer · from your files   | A file that was sent is cited, and every number in the answer appears in what was sent |
 | Answer · from this call    | Taken from the transcript or your note, numbers checked the same way                   |
-| Answer · from your screen  | Read off a screenshot by the AI model. Bolo cannot check it, and says so               |
+| Answer · from your screen  | Read off a screenshot by the AI model. Echo cannot check it, and says so               |
 | Answer · not in your files | The fact was not found. You get a polite line to buy time                              |
 | Answer · check this figure | A number in the answer is not in your files or the call. Do not read it out            |
 | Suggested reply            | A plain reply that needs no fact, or no context folder is loaded                       |
 
 **Meaning line.** Set the language you read in Settings. Under a line from the other
-person that mixes in other languages, Bolo shows the plain meaning. Click any of their
+person that mixes in other languages, Echo shows the plain meaning. Click any of their
 lines to explain it again. Turn it off with "Show a plain meaning…".
 
 **Screen.** Set a **Vision model** in Settings (a model that accepts images). Then
@@ -326,7 +326,7 @@ the transcript, meanings, answers and their sources as Markdown and JSON when a 
 
 ## Connect your calendar
 
-Bolo reads your meetings three ways. Use any one; they can be combined.
+Echo reads your meetings three ways. Use any one; they can be combined.
 
 | Way                                      | Setup                                              | What you get                               |
 | ---------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
@@ -334,7 +334,7 @@ Bolo reads your meetings three ways. Use any one; they can be combined.
 | **Sign in with Outlook / Microsoft 365** | An Azure app registration (below), once            | Live calendar, people, Teams links, agenda |
 | **iCal link or .ics file**               | Nothing: paste the calendar's private iCal address | Read-only copy, refreshed every 10 minutes |
 
-Sign-in opens your browser; Bolo never sees your password. It asks for **read-only**
+Sign-in opens your browser; Echo never sees your password. It asks for **read-only**
 calendar access, keeps the refresh token encrypted on this computer (Windows DPAPI), and
 **Disconnect** removes it (and revokes Google's grant).
 
@@ -342,12 +342,12 @@ calendar access, keeps the refresh token encrypted on this computer (Windows DPA
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → create a project.
 2. **APIs & Services → Library** → enable **Google Calendar API**.
-3. **OAuth consent screen** → External → app name "Bolo", your email → add scope
+3. **OAuth consent screen** → External → app name "Echo", your email → add scope
    `.../auth/calendar.events.readonly` → add yourself (and demo users) as **Test users**.
 4. **Credentials → Create credentials → OAuth client ID → Desktop app**.
 5. Put the client ID and secret in `.env`: `GOOGLE_CLIENT_ID=…` and
    `GOOGLE_CLIENT_SECRET=…` (a Desktop client's secret is not confidential; PKCE
-   protects the sign-in). Restart Bolo.
+   protects the sign-in). Restart Echo.
 
 While the app is in "Testing", only the test users you added can sign in, and Google asks
 them to sign in again every 7 days. That is fine for a demo; publishing removes both.
@@ -355,30 +355,31 @@ them to sign in again every 7 days. That is fine for a demo; publishing removes 
 ### Outlook / Microsoft 365 (about 5 minutes)
 
 1. [Azure portal](https://portal.azure.com/) → **App registrations → New registration**:
-   name "Bolo", supported accounts "Any organizational directory and personal Microsoft
+   name "Echo", supported accounts "Any organizational directory and personal Microsoft
    accounts".
 2. **Authentication → Add a platform → Mobile and desktop applications** → custom redirect
    URI `http://localhost` → Save. Set **Allow public client flows** to Yes.
 3. **API permissions → Add → Microsoft Graph → Delegated** → `Calendars.Read`,
-   `User.Read`, `offline_access`.
+   `User.Read`, `offline_access`, and `OnlineMeetings.ReadWrite` (for **New Teams meeting**;
+   work or school accounts only).
 4. Copy the **Application (client) ID** into `.env` as `MICROSOFT_CLIENT_ID=…`. Restart.
 
 Work accounts may need an admin to approve the app the first time.
 
 ### Calls in other apps
 
-With **Settings → Notice calls in Zoom, Teams, Meet and others** on (the default), Bolo
+With **Settings → Notice calls in Zoom, Teams, Meet and others** on (the default), Echo
 offers to start when another app starts using your microphone, which is how Windows
 itself knows to show the mic icon. It reads only which app is using the mic; no audio,
-no window titles. When that app lets go of the mic while Bolo is still listening, Bolo
+no window titles. When that app lets go of the mic while Echo is still listening, Echo
 reminds you to stop and save.
 
 ## How answers are kept honest
 
-A model can invent a figure and still say it came from your file. So Bolo checks:
+A model can invent a figure and still say it came from your file. So Echo checks:
 
 1. The model must end its reply with a source line, for example
-   `[source: inventory.csv, transcript]`. Bolo removes that line from what you see.
+   `[source: inventory.csv, transcript]`. Echo removes that line from what you see.
 2. A cited file counts only if its content was actually in that request.
 3. Every number in the answer must appear, as a whole number, in the file content that
    was sent, your note, the transcript or your typed question. `50` does not pass because
@@ -489,20 +490,23 @@ the code.
 1. **Endpoint**: `wss://api.vachana.ai/stt/v3/stream` works.
 2. **Handshake**: headers only. The first message is `connected`, with a config that
    includes `chunk_size: 512` and `partials_enabled: false`.
-3. **Bad key**: HTTP 401 on the upgrade (`INVALID_API_KEY`). Bolo shows a red error and
+3. **Bad key**: HTTP 401 on the upgrade (`INVALID_API_KEY`). Echo shows a red error and
    does not retry.
 4. **Messages**: `speech_start`, then one final `transcript` per utterance. No partial
    results and no `processing` message.
 5. **Fields**: `segment_index` is a number. `latency` is a number (144–269 ms seen), but
    what it measures is still unconfirmed.
-6. **Hinglish**: `en-hi-in-cm` is refused, so Bolo no longer offers it. `hi-IN` handles
-   Hinglish and writes English words in Devanagari ("एक्सटीरियर इमल्शन 5 लीटर").
-7. **Auto-detect**: comma-separated lists are refused. Bolo sends `indic-auto`, which is
+6. **Hinglish**: `en-hi-in-cm` is refused, so Echo no longer offers it. `hi-IN` handles
+   Hinglish and writes English words in Devanagari ("एक्सटीरियर इमल्शन 5 लीटर"). By default
+   (**Settings → AI & speech → Write the transcript in → English letters**) the AI model
+   rewrites each such line in Roman script ("exterior emulsion 5 litre") before it is shown,
+   about one request per line; a slow or failed rewrite keeps the original. Silent mode skips it.
+7. **Auto-detect**: comma-separated lists are refused. Echo sends `indic-auto`, which is
    accepted; its accuracy is untested. A refused language (close code 1008) is a red
    error, not endless retries.
 8. **End of stream**: closing the socket loses an unfinished sentence, and there is no
-   flush message. On Stop, Bolo sends up to 3 s of silence until the last line comes back.
-9. **Idle**: the server ends a stream after 60 s without speech, even with pings. Bolo
+   flush message. On Stop, Echo sends up to 3 s of silence until the last line comes back.
+9. **Idle**: the server ends a stream after 60 s without speech, even with pings. Echo
    reconnects.
 10. **TTS for `npm run demo-audio`**: works as written (`timbre-v2.5`, voices `Poorvi` and
     `Roopesh`, `language: "auto"`).
@@ -549,7 +553,7 @@ they say. `<think>` blocks from reasoning models are stripped. Screen reading us
   windows get titles, times and names, and an invite's description stays in the main
   process until a call is started from it. A **Join** button opens only the Meet, Zoom or
   Teams https link found in the invite.
-- **Meetings are saved on this computer** (`%APPDATA%\Bolo\meetings`), one JSON file
+- **Meetings are saved on this computer** (`%APPDATA%\Echo\meetings`), one JSON file
   each, until you delete them in the library. A copy goes to an export folder only if
   you set one.
 - Fixtures, demo audio and demo files are synthetic. No real personal data is used
@@ -582,12 +586,12 @@ terminal inside an Electron-based editor and the app exits at once, clear
 ## Windows installer
 
 ```powershell
-npm run dist:win    # → release\Bolo-Setup-0.1.0.exe
+npm run dist:win    # → release\Echo-Setup-0.1.0.exe
 ```
 
 A per-user NSIS installer (no admin), with Start menu and desktop shortcuts and a
 choosable folder. It's unsigned, so SmartScreen will warn. Settings and
-`%APPDATA%\Bolo\.env` are kept on uninstall. Config:
+`%APPDATA%\Echo\.env` are kept on uninstall. Config:
 [`electron-builder.yml`](electron-builder.yml).
 
 ## Dependencies

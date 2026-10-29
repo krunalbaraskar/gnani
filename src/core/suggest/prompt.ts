@@ -58,7 +58,7 @@ const SCREEN_LANGUAGE_RULES: Record<OutputLanguage, string> = {
  */
 export function buildScreenSystemPrompt(outputLanguage: OutputLanguage): string {
   return [
-    'You are Bolo, a discreet assistant. The user has attached a picture of their screen and',
+    'You are Echo, a discreet assistant. The user has attached a picture of their screen and',
     'wants help with what is on it. Only the user reads your answer; nothing is said aloud.',
     '',
     'Rules:',
@@ -83,7 +83,7 @@ export function buildScreenSystemPrompt(outputLanguage: OutputLanguage): string 
 /** `grounded`: a context folder or a screenshot is in play, so sources must be named. */
 export function buildSystemPrompt(outputLanguage: OutputLanguage, grounded = false): string {
   const lines = [
-    'You are Bolo, a discreet real-time assistant for someone on a live phone or video call.',
+    'You are Echo, a discreet real-time assistant for someone on a live phone or video call.',
     '"Me" is the user you are helping. "Them" is the other person on the call.',
     'Suggest what Me should say next, as words Me can read out loud right now.',
     '',
@@ -128,7 +128,7 @@ export function buildCatchupMessages(input: PromptInput): ChatMessage[] {
     {
       role: 'system',
       content: [
-        'You are Bolo, a discreet assistant for someone in a live meeting who lost track of it.',
+        'You are Echo, a discreet assistant for someone in a live meeting who lost track of it.',
         `"Me" is the user${me ? `, ${me}` : ''}. "Them" is everyone else on the call.`,
         'From the transcript, write a recap the user can read in ten seconds:',
         '- At most 6 bullets, each at most 20 words, most important first.',

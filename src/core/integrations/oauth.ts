@@ -15,6 +15,8 @@ export interface ProviderConfig {
   tokenUrl: string;
   /** Calendar API base, e.g. https://www.googleapis.com/calendar/v3. */
   apiBase: string;
+  /** Where new video meetings are made: the Meet API (Google), Graph (Microsoft). */
+  meetingsApi: string;
   scopes: string[];
   extraAuthParams: Record<string, string>;
   /** Where the redirect lands: Google takes 127.0.0.1, Microsoft wants "localhost". */
@@ -34,11 +36,16 @@ export function googleConfig(
     authUrl: base ? `${base}/google/auth` : 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: base ? `${base}/google/token` : 'https://oauth2.googleapis.com/token',
     apiBase: base ? `${base}/google/calendar/v3` : 'https://www.googleapis.com/calendar/v3',
+    meetingsApi: base ? `${base}/google/meet/v2` : 'https://meet.googleapis.com/v2',
     scopes: [
       'openid',
       'email',
       'profile',
       'https://www.googleapis.com/auth/calendar.events.readonly',
+      // Which calendars the user has ticked (work, shared, …), to read events from each.
+      'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+      // Only the Meet spaces Echo itself creates ("New Google Meet").
+      'https://www.googleapis.com/auth/meetings.space.created',
     ],
     // A refresh token, every time, so the user does not have to sign in again tomorrow.
     extraAuthParams: { access_type: 'offline', prompt: 'consent' },
@@ -60,7 +67,17 @@ export function microsoftConfig(
     authUrl: `${login}/authorize`,
     tokenUrl: `${login}/token`,
     apiBase: base ? `${base}/microsoft/graph/v1.0` : 'https://graph.microsoft.com/v1.0',
-    scopes: ['openid', 'profile', 'email', 'offline_access', 'User.Read', 'Calendars.Read'],
+    meetingsApi: base ? `${base}/microsoft/graph/v1.0` : 'https://graph.microsoft.com/v1.0',
+    scopes: [
+      'openid',
+      'profile',
+      'email',
+      'offline_access',
+      'User.Read',
+      'Calendars.Read',
+      // "New Teams meeting" (work or school accounts).
+      'OnlineMeetings.ReadWrite',
+    ],
     extraAuthParams: { prompt: 'select_account' },
     loopbackHost: 'localhost',
   };
@@ -177,10 +194,10 @@ export function identityFromIdToken(idToken: unknown): { email: string; name?: s
 
 /** The page the browser shows after the redirect. No script; nothing from the URL is echoed. */
 export function callbackPage(ok: boolean): string {
-  const title = ok ? 'Bolo is connected' : 'Sign-in did not finish';
+  const title = ok ? 'Echo is connected' : 'Sign-in did not finish';
   const body = ok
-    ? 'Your calendar is connected. You can close this tab and go back to Bolo.'
-    : 'Bolo could not finish signing in. Close this tab and try again from Bolo.';
+    ? 'Your calendar is connected. You can close this tab and go back to Echo.'
+    : 'Echo could not finish signing in. Close this tab and try again from Echo.';
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>body{font:16px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f7f7f5;color:#1b1d22}
 main{max-width:420px;text-align:center}h1{font-size:22px}</style></head>

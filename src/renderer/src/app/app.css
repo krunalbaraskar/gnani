@@ -27,7 +27,7 @@
 .app-shell {
   height: 100%;
   display: grid;
-  grid-template-columns: 68px 260px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
   grid-template-rows: 48px minmax(0, 1fr);
 }
 .workspace-header {
@@ -230,41 +230,17 @@
   height: 36px;
   background: #e9e1e7;
   color: #3e3139;
+  border: 0;
   border-radius: 6px;
+  padding: 0;
   font-weight: 800;
 }
-.workspace-sidebar {
-  grid-row: 2;
-  grid-column: 2;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 12px 90px;
-  border-right: 1px solid var(--line);
-  background: var(--sidebar);
+.rail-profile:hover:not(:disabled) {
+  background: #fff;
 }
-.sidebar-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 55px;
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--bold);
-  padding: 0 10px;
-}
-.sidebar-shortcut {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  border: none;
-  background: none;
-  padding: 8px 10px;
-  width: 100%;
-  text-align: left;
-}
-.sidebar-shortcut .count {
-  margin-left: auto;
+.rail-profile.on {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 .sidebar-section {
   display: flex;
@@ -274,50 +250,6 @@
   margin: 14px 0 4px;
   padding: 12px 8px 0;
   border-top: 1px solid var(--line);
-}
-.sidebar-event {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  position: relative;
-  min-height: 48px;
-}
-.event-dot {
-  width: 10px;
-  height: 10px;
-  flex: none;
-}
-.sidebar-event-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 1px;
-}
-.sidebar-event-text time {
-  font-size: 11px;
-  color: var(--muted);
-}
-.sidebar-event-text > span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 14px;
-}
-.event-start {
-  position: absolute;
-  right: 3px;
-  opacity: 0;
-  background: var(--card);
-}
-.sidebar-event:hover .event-start,
-.sidebar-event:focus-within .event-start {
-  opacity: 1;
-}
-.sidebar-empty {
-  color: var(--muted);
-  font-size: 12px;
-  padding: 10px;
 }
 .channel-row {
   display: flex;
@@ -346,18 +278,54 @@
 .start-meeting {
   position: fixed;
   z-index: 4;
-  bottom: 22px;
-  left: 250px;
+  bottom: 66px;
+  left: 10px;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 1px solid #211b20;
   border-radius: 50%;
   background: var(--primary);
   color: #fff;
   box-shadow: 0 3px 9px #00000038;
+}
+.start-menu {
+  position: fixed;
+  z-index: 6;
+  left: 66px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 300px;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #00000059;
+}
+.start-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: none;
+  text-align: left;
+}
+.start-menu button > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 700;
+}
+.start-menu small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
 }
 .start-meeting:hover:not(:disabled) {
   color: #fff;
@@ -370,7 +338,7 @@
   box-shadow: none;
 }
 .app-content {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 2;
   display: flex;
   flex-direction: column;
@@ -720,6 +688,49 @@
   text-overflow: ellipsis;
   font-size: 14px;
 }
+.todo-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px;
+}
+.todo-add input {
+  flex: 1;
+  width: 0;
+  border: none;
+  background: none;
+  padding: 7px;
+}
+.todo-add input:focus-visible {
+  outline: none;
+}
+.todo-add:focus-within {
+  border-color: var(--accent);
+}
+.todo-own li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* A pasted link or a 500-character to-do wraps instead of running out of the card. */
+.action-list label {
+  min-width: 0;
+}
+.action-list label span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.todo-own .action-meta {
+  margin: 0;
+  flex: none;
+}
+.todo-own li:not(:hover, :focus-within) .action-meta button {
+  opacity: 0;
+}
 .dashboard-ask {
   display: flex;
   flex-direction: column;
@@ -945,7 +956,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 164px minmax(0, 1fr);
+  grid-template-columns: 208px minmax(0, 1fr);
 }
 .settings-nav {
   display: flex;
@@ -967,6 +978,7 @@
   min-height: 44px;
   font-size: 13px;
   color: var(--muted);
+  white-space: nowrap;
 }
 .settings-nav button::after {
   content: '›';
@@ -1135,6 +1147,7 @@
 }
 .account-list strong {
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 .keys-status {
   padding: 14px;
@@ -1293,24 +1306,12 @@
   }
 }
 @media (max-width: 1150px) {
-  .settings-layout {
-    grid-template-columns: 146px minmax(0, 1fr);
-  }
   .settings-scroll {
     padding-left: 20px;
     padding-right: 20px;
   }
 }
 @media (max-width: 979px) {
-  .app-shell {
-    grid-template-columns: 68px minmax(0, 1fr);
-  }
-  .workspace-sidebar {
-    display: none;
-  }
-  .app-content {
-    grid-column: 2;
-  }
   .app-brand {
     width: 50px;
   }
@@ -1319,12 +1320,6 @@
   }
   .workspace-header {
     gap: 16px;
-  }
-  .start-meeting {
-    left: 10px;
-    bottom: 66px;
-    width: 48px;
-    height: 48px;
   }
   .page {
     padding: 20px 24px;

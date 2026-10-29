@@ -41,13 +41,13 @@ and a few touches, not in copying Slack's brand colours:
   `components/Avatars.tsx`), **bold name**, muted time, text below; consecutive lines
   from the same speaker within 2 minutes collapse under one header (Slack grouping);
   hover shows a subtle row background and a small action ("Explain" for their lines).
-- Bot posts: Bolo's answers appear as a message from **Bolo** with an `APP` tag next to
+- Bot posts: Echo's answers appear as a message from **Echo** with an `APP` tag next to
   the name (Slack style), the answer text, and an attachment-style block with a 4 px
   coloured left border: green = from your files / past meetings / this call, amber =
   check this figure / not in your files, blue = screen, neutral = suggested reply.
   Sources render as small chips inside that block.
 - Composer: the Ask input becomes a Slack-like composer — rounded bordered box,
-  placeholder "Message Bolo…" (keep the accessible label "Ask Bolo"), a slim toolbar row
+  placeholder "Message Echo…" (keep the accessible label "Ask Echo"), a slim toolbar row
   inside with icon buttons: attach screen (existing toggle), **Catch me up**, send.
 - Banners (notices, mentions, calendar offer, detected call, click-through): Slack-style
   top banners — icon on the left, one line of text, actions on the right, close ×.
@@ -58,7 +58,7 @@ and a few touches, not in copying Slack's brand colours:
 
 ```
 ╭───────────────────────────────────────────────────────────╮  44px bar
-│ ◉ Bolo  ▶ Start | 00:12 ⏸ ■ │ ●Them ●Me │ Active ▾ │ ⛨ ⌃ ⋯ │
+│ ◉ Echo  ▶ Start | 00:12 ⏸ ■ │ ●Them ●Me │ Active ▾ │ ⛨ ⌃ ⋯ │
 ╰───────────────────────────────────────────────────────────╯
 ╭───────────────────────────────────────────────────────────╮  banner(s)
 │ 🔔 Asked you · Mehta Hardware  “Krunal, can you…”  Answer ×│
@@ -69,12 +69,12 @@ and a few touches, not in copying Slack's brand colours:
 │ [MH] Mehta Hardware  10:42                                │
 │      Achha, blue wala 5 litre ka kitna stock…            │
 │      ↳ How much stock of the blue 5-litre is there…       │
-│ [B]  Bolo APP  10:42                                      │
+│ [B]  Echo APP  10:42                                      │
 │      ┃ Answer · from your files                           │
 │      ┃ Blue 5 litre ke 142 units Pune godown mein hain…  │
 │      ┃ [inventory.csv] [price-list.md]          12 ms     │
 │ ╭───────────────────────────────────────────────────────╮ │
-│ │ Message Bolo…                                         │ │
+│ │ Message Echo…                                         │ │
 │ │ 🖥  ⟲ Catch me up                                ➤    │ │
 │ ╰───────────────────────────────────────────────────────╯ │
 ╰───────────────────────────────────────────────────────────╯
@@ -84,29 +84,29 @@ and a few touches, not in copying Slack's brand colours:
   timer + Stop, Pause, listening dots, mode chip, shield, expand, menu). The composer
   moves out of the bar into the panel's Live tab; when the panel is collapsed, the bar
   keeps a compact "Ask" button that expands the panel and focuses the composer, so
-  asking stays one click away. (Keep the `Ask Bolo` input reachable whenever a call runs
+  asking stays one click away. (Keep the `Ask Echo` input reachable whenever a call runs
   and the panel is open; the e2e test types into it.)
 - **Live tab** = the conversation feed: the last few "them" lines (with meaning lines)
-  and Bolo's latest answer as a bot post, newest at the bottom, auto-scrolled; the
+  and Echo's latest answer as a bot post, newest at the bottom, auto-scrolled; the
   composer pinned at the bottom of the panel. Empty state: a friendly line with the
   hotkeys.
 - **Transcript tab**: the full Slack-style message list (grouping, avatars; "Me" uses
   `settings.myName` when set; mentioned lines get the @-mention highlight).
 - **Context / Settings tabs**: restyle the forms to the app's form style (labels above
   fields, white fields, section cards). In the overlay Settings, put **Audio** first.
-- **Menu (⋯)**: a small popover card (not a strip) with: Open Bolo (`openApp('home')`),
+- **Menu (⋯)**: a small popover card (not a strip) with: Open Echo (`openApp('home')`),
   Meetings, Click-through, Hide, Quit.
 - Handle the new event `{ type: 'overlay-panel', panel }` (already in the reducer) — and
   in the main window's Settings → AI & speech, replace the "Audio input is set in the
   call bar" text with a button **Open audio settings** calling
-  `window.bolo.showOverlayPanel('settings')`.
+  `window.echo.showOverlayPanel('settings')`.
 
 ## Must keep working (the end-to-end tests drive these)
 
 Keep these names/classes, or update `scripts/e2e-electron.mjs` / `scripts/e2e-ui.mjs`
 to match while keeping every check's intent:
 
-- Button "Start", status "Listening", label "Ask Bolo", tabs Live/Transcript/Context/
+- Button "Start", status "Listening", label "Ask Echo", tabs Live/Transcript/Context/
   Settings, button "Mode: Active", title "Stop the call and save", "Expand"/"Collapse"
   titles, "Before you record a call" + "I understand" (consent), "Keys (from .env",
   `input[type=file]` ×2 for WAV replay in Settings.
