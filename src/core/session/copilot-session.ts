@@ -322,9 +322,19 @@ export class CopilotSession {
       }
     }
 
+    // A watch word may be typed in either script: mentions.ts tells the user to add the
+    // spelling speech-to-text produces ("क्रुणाल") when it writes Hindi in Devanagari. But
+    // transcriptScript 'roman' rewrites the line into Roman letters first, so by the time
+    // we get here a native-script term no longer matches, and a Roman term only matches if
+    // that AI rewrite happened to succeed — it may time out. Matching the line we display
+    // and the line Gnani sent together makes the alert fire for either spelling, whether
+    // or not the rewrite landed.
     const mentioned =
       seg.speaker === 'them'
-        ? findMentions(seg.text, watchTerms(settings.myName, settings.watchWords))
+        ? findMentions(
+            seg.text === t.text.trim() ? seg.text : `${seg.text}\n${t.text}`,
+            watchTerms(settings.myName, settings.watchWords),
+          )
         : [];
     if (mentioned.length) seg.mentions = mentioned;
 

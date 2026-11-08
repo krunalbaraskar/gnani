@@ -346,6 +346,49 @@ describe('CopilotSession mentions and catch-up', () => {
     await session.stop();
   });
 
+  // Regression: with a real Gnani key the line arrives in Devanagari and transcriptScript
+  // 'roman' rewrites it with the model. Matching only the rewritten line loses a watch word
+  // typed in the original script; matching only the original loses a Roman one when the
+  // rewrite succeeds. Either spelling has to alert, in both cases.
+  it.each([
+    ['a Roman watch word', 'Mehta Hardware'],
+    ['a Devanagari watch word', 'मेहता हार्डवेयर'],
+  ])('alerts on %s when the line is rewritten into Roman script', async (_label, watchWords) => {
+    const { fake, emit } = fakeStt();
+    const mentions: { terms: string[] }[] = [];
+    const native = 'हाँ जी, मेहता हार्डवेयर से बोल रहे हैं।';
+    const roman = 'Haan ji, Mehta Hardware se bol rahe hain.';
+    const session = new CopilotSession({
+      stt: fake,
+      // Stands in for the rewrite call, which succeeds here.
+      llm: () => ({
+        name: 'romanizer',
+        async *streamChat() {
+          yield roman;
+        },
+      }),
+      settings: () => ({
+        ...DEFAULT_SETTINGS,
+        mode: 'assist',
+        transcriptScript: 'roman',
+        explainThem: false,
+        myName: '',
+        watchWords,
+      }),
+      events: {
+        ...recordEvents().events,
+        onMention: (m) => mentions.push(m as { terms: string[] }),
+      },
+    });
+    session.start();
+    emit('them', native);
+    await waitFor(() => mentions.length === 1, 2000, `an alert for ${watchWords}`);
+    expect(mentions[0]!.terms).toEqual([watchWords]);
+    // The line is still displayed in Roman script; only the matching looked at both.
+    expect(session.transcript.all()[0]!.text).toBe(roman);
+    await session.stop();
+  });
+
   it('catches the user up from the recent transcript, checking figures, even in silent mode', async () => {
     const { fake, emit } = fakeStt();
     const requests: string[] = [];

@@ -85,11 +85,12 @@ Checked on Windows 11 (build 26100) on 2026-10-09.
 | Modes (Silent / Assist / Active) and pause                        | Done, unit-tested                                                                                                                                                                                                                                         |
 | Past meetings in answers, ask your meetings, catch-up, alerts     | Done, unit-tested and end to end with the mock model (2026-10-26)                                                                                                                                                                                         |
 | Calendar (iCal link or file), speaker names, guessing speakers    | Done, unit-tested and end to end with an .ics file and the mock model (2026-10-28). Not yet tried with a real Google/Outlook link                                                                                                                         |
-| Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested; minutes not yet written by a real model, only the mock (2026-10-26)                                                                                                                                                                    |
+| Minutes, meeting library, search, PDF/Markdown/email export       | Done, unit-tested. **Minutes written by a real model** (Gemini 3.5 Flash Lite) from a real Gnani transcript: summary, key points, decisions, owned action items, open questions, next steps (2026-11-09, `npm run demo-rehearsal`)                        |
 | The whole app end to end (Electron, real windows)                 | **Passes on Windows** (2026-10-28) against mock Gnani, AI and Google sign-in servers: 56 checks, `npm run test:e2e`; main-window UI: `npm run test:ui`; every page in light and dark (62 views: errors, overflow, labels, contrast): `npm run test:pages` |
+| The whole app against the **real** services                       | **Passes on Windows** (2026-11-09): 24 checks, `npm run demo-rehearsal` — real Gnani transcribes the Hinglish demo call, real model writes the meanings, the unprompted answer with its sources, the typed answer, the catch-up and the minutes           |
 | Live microphone + system-audio loopback                           | **Works on Windows**: both streams deliver audio to the mock Gnani server, `npm run test:live`                                                                                                                                                            |
 | Hidden from screen capture                                        | **Verified on Windows** with a screen capture, transparent and opaque window. Not yet checked inside a real Zoom/Meet/Teams share                                                                                                                         |
-| Screen reading                                                    | Capture and request path tested end to end with a mock model. Not yet run with a real vision model                                                                                                                                                        |
+| Screen reading                                                    | Capture and request path tested with a mock model, and **against a real vision model** (2026-11-09): the capture reached it and came back answered. Answer quality on a real document is still unmeasured                                                 |
 | Gnani realtime STT client                                         | **Run against the real API** (2026-10-23), alone and in the full app with real answers — see [what was checked](#checked-against-the-real-api)                                                                                                            |
 | Windows installer (NSIS)                                          | Config done; build the `.exe` with `npm run dist:win`                                                                                                                                                                                                     |
 
@@ -128,6 +129,7 @@ consent notice. Then:
 | `npm run fixtures`                    | Regenerate the synthetic test WAVs                                                   |
 | `npm run dist:win`                    | Build the Windows installer (run on Windows)                                         |
 | `npm run test:e2e` / `test:live`      | Optional end-to-end tests of the real app (need Playwright, see [Testing](#testing)) |
+| `npm run demo-rehearsal`              | Rehearse the demo against the real Gnani and AI services, with your `.env` keys      |
 
 ## Try it with no keys
 
@@ -501,6 +503,13 @@ the code.
    (**Settings → AI & speech → Write the transcript in → English letters**) the AI model
    rewrites each such line in Roman script ("exterior emulsion 5 litre") before it is shown,
    about one request per line; a slow or failed rewrite keeps the original. Silent mode skips it.
+   That rewrite is on the critical path, so it has a short deadline (4 s). Measured on
+   Gemini 3.5 Flash Lite over the four lines of the demo call: **1.4 s a line** with
+   `reasoning_effort` unset, **0.84 s** with `LLM_REASONING_EFFORT=low`. Set it — a thinking
+   model that misses the deadline leaves one line in Devanagari while its neighbours are in
+   Roman, which looks broken. This model **refuses `none` with HTTP 400**, so use `low`.
+   An alert for a watch word does not depend on the rewrite landing: the term is matched
+   against the rewritten line and the original together, so either spelling fires.
 7. **Auto-detect**: comma-separated lists are refused. Echo sends `indic-auto`, which is
    accepted; its accuracy is untested. A refused language (close code 1008) is a red
    error, not endless retries.
@@ -562,24 +571,34 @@ they say. `<think>` blocks from reasoning models are stripped. Screen reading us
 ## Testing
 
 ```powershell
-npm test        # 222 tests: audio, STT client vs mock server, LLM vs mock server, context
+npm test        # 336 tests: audio, STT client vs mock server, LLM vs mock server, context
                 # files, answer checks, meanings, session end to end with WAV fixtures,
                 # export, settings, UI reducer
 ```
 
-Two optional checks drive the **real app**. They need Playwright, which is not a
+The optional checks below drive the **real app**. They need Playwright, which is not a
 dependency, so install it temporarily:
 
 ```powershell
 npm run build
 npm i --no-save playwright
-npm run test:e2e    # the Electron app vs mock Gnani + mock AI, replaying fixtures: bar
-                    # position and size, context folder, grounded answer, typed question,
-                    # "not in your files", screen answer, meanings, export, key handling
-npm run test:live   # real microphone + system-audio loopback into the mock Gnani server
+npm run test:e2e        # the Electron app vs mock Gnani + mock AI, replaying fixtures: bar
+                        # position and size, context folder, grounded answer, typed question,
+                        # "not in your files", screen answer, meanings, export, key handling
+npm run test:live       # real microphone + system-audio loopback into the mock Gnani server
+npm run demo-rehearsal  # the app against the REAL services, using the keys in .env
 ```
 
-Both pass on Windows 11. Screenshots go to `test-results/`. If you start them from a
+`demo-rehearsal` is the one to run before a demo. It replays `demo-audio/` against the
+real Gnani endpoint and the real model, then prints what they actually produced — the
+transcript, each meaning, every answer with its sources and first-token time, and the
+minutes — into `test-results/demo-rehearsal/`. It asserts loosely on purpose: a real model
+never writes the same words twice, so it checks the shape of each stage rather than exact
+strings, and judges from the app's own event stream rather than the DOM, because a notice
+like "Meeting saved" is transient and a screenshot-driven check races it. It writes to a
+throwaway settings folder, so your own settings and meeting library are untouched.
+
+All pass on Windows 11. Screenshots go to `test-results/`. If you start them from a
 terminal inside an Electron-based editor and the app exits at once, clear
 `ELECTRON_RUN_AS_NODE` first (the scripts already do this for the app they launch).
 

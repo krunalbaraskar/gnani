@@ -31,7 +31,11 @@ export function buildRomanizeMessages(text: string): ChatMessage[] {
 export async function romanize(
   provider: LlmProvider,
   text: string,
-  timeoutMs = 2500,
+  // Measured against Gemini 3.5 Flash Lite: ~0.8–1.5 s a line on its own, but the rewrite
+  // competes with the gloss and answer requests for the same model, and a line that times
+  // out is shown in Devanagari while its neighbours are in Roman — visibly inconsistent.
+  // 4 s leaves room for that contention. Set LLM_REASONING_EFFORT=low for thinking models.
+  timeoutMs = 4000,
 ): Promise<string> {
   if (!hasIndicScript(text)) return text;
   const abort = new AbortController();

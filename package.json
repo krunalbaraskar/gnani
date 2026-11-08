@@ -30,7 +30,8 @@
     "mock-llm": "node scripts/mock-llm.ts",
     "test:live": "node scripts/e2e-live.mjs",
     "test:ui": "node scripts/e2e-ui.mjs",
-    "test:pages": "node scripts/check-pages.mjs"
+    "test:pages": "node scripts/check-pages.mjs",
+    "demo-rehearsal": "node scripts/demo-rehearsal.mjs"
   },
   "dependencies": {
     "ws": "^8.22.0"
