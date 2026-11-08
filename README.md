@@ -95,7 +95,9 @@ Checked on Windows 11 (build 26100) on 2026-10-09.
 | Windows installer (NSIS)                                          | Config done; build the `.exe` with `npm run dist:win`                                                                                                                                                                                                     |
 
 Manual test plan: [docs/WINDOWS_TESTING.md](docs/WINDOWS_TESTING.md). Design record:
-[docs/designs/echo-context-copilot.md](docs/designs/echo-context-copilot.md).
+[docs/designs/echo-context-copilot.md](docs/designs/echo-context-copilot.md). Running the
+demo: [docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md) — the measured timings, the questions
+`demo-context/` can answer, and the offline fallback.
 
 ## Quick start (Windows)
 

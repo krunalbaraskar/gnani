@@ -199,7 +199,10 @@ try {
       .isEnabled()
       .catch(() => false)
   ) {
-    await page.getByLabel('Ask Echo').fill('what rate did we give them last time?');
+    // A question demo-context can actually answer: project-notes.md records "delivery
+    // within 7 working days". Asking something the files do not cover only measures how
+    // politely the model dodges.
+    await page.getByLabel('Ask Echo').fill('delivery kitne din mein hoti hai?');
     await page.getByLabel('Ask Echo').press('Enter');
   }
   await sleep(7000);
@@ -222,6 +225,32 @@ try {
     `the call ended on its own (${Math.round((Date.now() - t0) / 1000)} s)`,
   );
   await sleep(6000);
+
+  // ---- How each speaker's stream to Gnani actually behaved ----
+  // Two sockets are open at once, one per speaker. A stream that reconnects or is refused
+  // mid-call loses audio silently, and the only symptom is a speaker with no lines, so the
+  // state history is printed whether or not anything failed.
+  const statuses = of('stt-status').map((e) => e.status);
+  show(
+    'Gnani connection states, per speaker',
+    ['them', 'me']
+      .map((sp) => {
+        const mine = statuses.filter((s) => s.speaker === sp);
+        const trail = mine.map((s) => s.state + (s.error ? ` (${s.error})` : '')).join(' -> ');
+        return `${sp.padEnd(5)}: ${trail || '(no status at all)'}`;
+      })
+      .join('\n'),
+  );
+  const brokenStreams = statuses.filter((s) => s.state === 'error' || s.error);
+  check(
+    !brokenStreams.length,
+    `neither stream errored (${brokenStreams.map((s) => `${s.speaker}: ${s.error}`).join('; ') || 'none'})`,
+  );
+  const reconnected = statuses.filter((s) => s.state === 'reconnecting');
+  check(
+    !reconnected.length,
+    `neither stream had to reconnect (${reconnected.length} reconnect(s))`,
+  );
 
   // ---- What the live services actually produced ----
   const segments = of('segment').map((e) => e.segment);
@@ -280,9 +309,11 @@ try {
     answers.some((a) => a.trigger === 'auto'),
     'answered their question unprompted (Active mode)',
   );
+  const typedAnswer = answers.find((a) => a.trigger === 'typed');
+  check(!!typedAnswer, 'answered the question typed into the composer');
   check(
-    answers.some((a) => a.trigger === 'typed'),
-    'answered the question typed into the composer',
+    !!typedAnswer && (typedAnswer.sources ?? []).length > 0,
+    `the typed answer was grounded in a file (verdict: ${typedAnswer?.verdict ?? 'none'})`,
   );
   check(
     answers.some((a) => a.trigger === 'catchup'),
