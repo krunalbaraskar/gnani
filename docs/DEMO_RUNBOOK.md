@@ -33,8 +33,9 @@ Check these:
 - [ ] Nothing else is holding the microphone (close Zoom, Teams, Meet).
 - [ ] Wi-Fi is working. Both Gnani and the model are network calls; there is no offline mode
       with real keys.
-- [ ] Have `demo-context/` chosen as the context folder and both demo WAVs selected
-      (Settings → Audio → Replay WAV files) **before** the audience is watching.
+- [ ] Have `demo-context/` chosen as the context folder and the demo call loaded with the
+      **Demo** button (Settings → Audio) **before** the audience is watching. Both buttons
+      should read `Them: demo them.wav` and `Me: demo me.wav`.
 
 ## The run
 
@@ -95,15 +96,16 @@ then press the hotkey. Otherwise skip it — it is the weakest 20 seconds you co
 
 ## If something breaks
 
-- **One side of the call produces no lines at all.** Seen once in five real runs: the
-  "them" stream delivered nothing while "me" transcribed normally, so there was no alert,
-  no meaning and no unprompted answer — the whole demo, gone, with no error on screen. Echo
-  opens one socket per speaker and a stream that is refused or reconnects loses its audio
-  quietly. **This is why you rehearse immediately before presenting**: the rehearsal prints
-  each speaker's connection history and fails if either stream errored or reconnected. If
-  it happens, stop and run it again before going on — it passed on the retry. If it keeps
-  happening, your key is probably being throttled for two concurrent streams; fall back to
-  the mock servers below.
+- **One side of the call produces no lines at all.** Seen in 2 of 7 real runs: the "them"
+  stream connected cleanly and delivered nothing, so there was no alert, no meaning and no
+  unprompted answer — the whole demo, gone, with no error on screen. It was not the
+  network. Choosing the two replay WAVs within milliseconds of each other let the second
+  pick overwrite the first, so that side streamed silence (fixed in `SettingsPanel.tsx`;
+  each pick now builds on the current selection). By hand, at human speed, it never
+  happened. **Load the demo with the Demo button** (Settings → Audio), which sets both
+  files in one step, and check that both buttons show a file name before you press Start.
+  The rehearsal still prints each speaker's connection history and fails if either stream
+  errored or reconnected.
 - **A stage is slow or silent.** Keep talking and move on; the transcript keeps running.
   Every answer in the rehearsal started inside 2 s, but a network is a network.
 - **A line stays in Devanagari.** That is the rewrite missing its deadline, nothing worse.

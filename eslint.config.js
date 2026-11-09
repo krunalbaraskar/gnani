@@ -4,7 +4,17 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['out/**', 'dist/**', 'release/**', 'node_modules/**', 'coverage/**', '.gstack/**'] },
+  {
+    ignores: [
+      'out/**',
+      'dist/**',
+      'release/**',
+      'node_modules/**',
+      'coverage/**',
+      '.gstack/**',
+      'launch-video/**', // local video toolchain, gitignored
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

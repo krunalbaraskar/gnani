@@ -10,7 +10,8 @@ interface Props {
   app: AppState;
   running: boolean;
   files: ReplaySelection;
-  onFiles: (f: ReplaySelection) => void;
+  /** Takes an update of the current selection (React's setState updater form). */
+  onFiles: (update: (current: ReplaySelection) => ReplaySelection) => void;
   onLoadDemo: () => void;
   onChange: (patch: Partial<Settings>) => void;
   onChooseExportDir: () => void;
@@ -46,7 +47,11 @@ export function SettingsPanel({
     const file = list?.[0];
     if (!file) return;
     const buf = await file.arrayBuffer();
-    onFiles({ ...files, [speaker]: buf, [`${speaker}Name`]: file.name });
+    // Build on the selection as it is now, not as it was when this handler was created:
+    // two picks in quick succession each await their read, and spreading the captured
+    // `files` let the second one silently drop the first — that side then streamed
+    // nothing to the speech-to-text while still showing as connected.
+    onFiles((current) => ({ ...current, [speaker]: buf, [`${speaker}Name`]: file.name }));
   };
   const baseUrl = useDraft(s.llmBaseUrl, (v) => onChange({ llmBaseUrl: v.trim() }));
   const model = useDraft(s.llmModel, (v) => onChange({ llmModel: v.trim() }));
