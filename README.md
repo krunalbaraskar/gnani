@@ -14,7 +14,8 @@ hang up.** Powered by **Gnani speech-to-text**.
   <strong>⬇ <a href="https://github.com/krunalbaraskar/gnani/releases/latest">Download Echo for Windows</a></strong>
 </p>
 
-Built for **Gnani AI's Great Indian AI Internship Challenge**.
+Built for **Gnani AI's Great Indian AI Internship Challenge**. **One-page pitch:
+[PITCH.md](PITCH.md)**
 
 ---
 
