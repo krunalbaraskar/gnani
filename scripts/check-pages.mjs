@@ -371,7 +371,8 @@ try {
     await main.getByText('From your meetings').first().waitFor({ timeout: 10000 });
     await check(main, `${theme}-main-ask`);
 
-    await nav('Settings').click();
+    // Settings live behind the profile button at the bottom of the rail.
+    await main.getByRole('button', { name: 'Your profile', exact: true }).click();
     const sections = main
       .getByRole('navigation', { name: 'Settings sections' })
       .getByRole('button');
@@ -485,7 +486,7 @@ try {
     await setTheme(theme);
     await main.evaluate(() => window.echo.updateSettings({ onboarded: false }));
     await main.reload();
-    for (let step = 1; step <= 5; step++) {
+    for (let step = 1; step <= 6; step++) {
       await main.waitForTimeout(200);
       await check(main, `${theme}-main-onboarding-${step}`);
       const next = main.getByRole('button', { name: /^(Next|Continue|I understand)/ }).first();

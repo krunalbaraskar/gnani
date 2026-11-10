@@ -15,6 +15,8 @@ const app: AppState = {
   keys: { stt: true, llm: false },
   stt: { name: 'Gnani', keyVar: 'GNANI_API_KEY', url: 'wss://x' },
   llm: { baseUrl: 'http://x', model: 'm' },
+  envLlm: { baseUrl: 'http://x', model: 'm', reasoningEffort: '' },
+  keyFile: '/tmp/echo/.env',
   platform: 'win32',
   clickThrough: false,
   sessionRunning: false,
@@ -25,6 +27,7 @@ const app: AppState = {
   integrations: { accounts: [], available: { google: false, microsoft: false } },
   detected: null,
   demoAudioDir: '/tmp/demo',
+  sampleContextDir: '',
   context: { dir: '', files: [], skipped: [] },
   shareProtection: 'unverified',
 };

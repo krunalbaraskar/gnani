@@ -9,8 +9,10 @@ import {
   PrivacyText,
   ProfileFields,
 } from './SettingsPage.tsx';
+import { KeysForm } from './KeysForm.tsx';
 
-const STEPS = ['Welcome', 'Your name', 'Your calendar', 'Your knowledge', 'Ready'];
+const STEPS = ['Welcome', 'API keys', 'Your name', 'Your calendar', 'Your knowledge', 'Ready'];
+const LAST = STEPS.length - 1;
 
 export function Onboarding(props: SettingsProps) {
   const { app, onChange } = props;
@@ -74,10 +76,20 @@ export function Onboarding(props: SettingsProps) {
               </button>
             </>
           )}
-          {step === 1 && <ProfileFields {...props} />}
-          {step === 2 && <CalendarAccounts {...props} />}
-          {step === 3 && <KnowledgeFields {...props} />}
-          {step === 4 && (
+          {step === 1 && (
+            <>
+              <p>
+                Echo uses <strong>Gnani</strong> to transcribe the call and an{' '}
+                <strong>AI model</strong> of your choice to answer and write minutes. Paste your
+                keys once; they stay on this computer.
+              </p>
+              <KeysForm {...props} />
+            </>
+          )}
+          {step === 2 && <ProfileFields {...props} />}
+          {step === 3 && <CalendarAccounts {...props} />}
+          {step === 4 && <KnowledgeFields {...props} />}
+          {step === LAST && (
             <>
               <p>A little preparation, a calmer meeting. You’re ready to go.</p>
               <KeysStatus app={app} />
@@ -116,9 +128,9 @@ export function Onboarding(props: SettingsProps) {
             <button
               className="primary"
               disabled={busy}
-              onClick={() => (step === 4 ? void save(true) : move(step + 1))}
+              onClick={() => (step === LAST ? void save(true) : move(step + 1))}
             >
-              {step === 4 ? 'Let’s begin' : 'Next'}
+              {step === LAST ? 'Let’s begin' : 'Next'}
               <Icon name="arrow" size={15} />
             </button>
           ) : (

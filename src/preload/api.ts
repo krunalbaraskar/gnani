@@ -8,7 +8,10 @@ import type {
   ActionItemView,
   TodoItem,
   AppSection,
+  KeysPatch,
   OverlayPanel,
+  SaveKeysResult,
+  TestKeysResult,
   ConnectResult,
   NewMeetingResult,
   StartResult,
@@ -29,6 +32,10 @@ import type { Speaker } from '../shared/transcript/types.ts';
 export interface EchoApi {
   getState(): Promise<AppState>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
+  /** Saves API keys to Echo's own .env. Keys go one way: they are never read back. */
+  saveKeys(patch: KeysPatch): Promise<SaveKeysResult>;
+  /** Checks the saved keys against Gnani and the AI model (no audio is sent). */
+  testKeys(): Promise<TestKeysResult>;
   /** `eventKey`: start the call for this calendar meeting (its title, people and agenda). */
   startSession(eventKey?: string): Promise<StartResult>;
   /** Opens the native file dialog for an .ics file; the renderer never supplies a path. */
@@ -44,6 +51,8 @@ export interface EchoApi {
   /** Opens the native folder dialog; the renderer never supplies a path. */
   chooseContextDir(): Promise<ContextView>;
   reloadContext(): Promise<ContextView>;
+  /** Points the context folder at the sample files that ship with Echo. */
+  useSampleContext(): Promise<ContextView>;
   /** A typed question; `withScreen` attaches a screenshot taken by the main process. */
   ask(text: string, withScreen: boolean): void;
   askScreen(): void;

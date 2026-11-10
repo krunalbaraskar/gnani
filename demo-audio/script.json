@@ -1,0 +1,34 @@
+[
+  {
+    "speaker": "me",
+    "text": "Hello, namaste! Sharma Paints se Rohan bol raha hoon."
+  },
+  {
+    "speaker": "them",
+    "text": "Haan Rohan ji, Mehta Hardware se bol rahe hain. Monsoon order ke baare mein baat karni thi."
+  },
+  {
+    "speaker": "me",
+    "text": "Ji bilkul, bataiye kya chahiye."
+  },
+  {
+    "speaker": "them",
+    "text": "Blue wala exterior emulsion, five litre pack, kitna stock pada hai aapke paas?"
+  },
+  {
+    "speaker": "me",
+    "text": "Ek second, main abhi check karke batata hoon."
+  },
+  {
+    "speaker": "them",
+    "text": "Aur agar hum sattar units lein, toh thok mein kya rate lagega?"
+  },
+  {
+    "speaker": "me",
+    "text": "Ji, wholesale rate lagega, main confirm karta hoon."
+  },
+  {
+    "speaker": "them",
+    "text": "Theek hai. Aur delivery ka kya hai, pichhli baar aapne kitne din bola tha?"
+  }
+]

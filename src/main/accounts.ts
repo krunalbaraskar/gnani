@@ -319,10 +319,9 @@ export class AccountsService {
         } else {
           // Every calendar ticked in Google Calendar, not just the primary one. Without the
           // calendar-list permission (signed in before it was asked for), the primary only.
-          const ids = await get(googleCalendarListUrl(cfg.apiBase)).then(
-            googleCalendarIds,
-            () => ['primary'],
-          );
+          const ids = await get(googleCalendarListUrl(cfg.apiBase)).then(googleCalendarIds, () => [
+            'primary',
+          ]);
           const results = await Promise.allSettled(
             ids.map((id) => get(googleEventsUrl(cfg.apiBase, from, to, id))),
           );

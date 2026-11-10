@@ -5,6 +5,8 @@ import type { EchoApi } from './api.ts';
 const api: EchoApi = {
   getState: () => ipcRenderer.invoke(IPC.getState),
   updateSettings: (patch) => ipcRenderer.invoke(IPC.updateSettings, patch),
+  saveKeys: (patch) => ipcRenderer.invoke(IPC.saveKeys, patch),
+  testKeys: () => ipcRenderer.invoke(IPC.testKeys),
   startSession: (eventKey) => ipcRenderer.invoke(IPC.startSession, eventKey),
   chooseCalendarFile: (clear) => ipcRenderer.invoke(IPC.chooseCalendarFile, clear),
   refreshCalendar: () => ipcRenderer.invoke(IPC.refreshCalendar),
@@ -16,6 +18,7 @@ const api: EchoApi = {
   readDemoAudio: () => ipcRenderer.invoke(IPC.readDemoAudio),
   chooseContextDir: () => ipcRenderer.invoke(IPC.chooseContextDir),
   reloadContext: () => ipcRenderer.invoke(IPC.reloadContext),
+  useSampleContext: () => ipcRenderer.invoke(IPC.useSampleContext),
   ask: (text, withScreen) => ipcRenderer.send(IPC.ask, text, withScreen),
   askScreen: () => ipcRenderer.send(IPC.askScreen),
   requestMeaning: (id) => ipcRenderer.send(IPC.requestMeaning, id),

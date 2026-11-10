@@ -14,6 +14,14 @@ files:
   - package.json
   - '!**/*.map'
 asar: true
+# The demo call (Gnani TTS voices, synthetic) and the made-up business files it asks about,
+# so an installed Echo can be tried without a real call: Settings → Audio → Demo.
+extraResources:
+  - from: demo-audio
+    to: demo-audio
+    filter: ['me.wav', 'them.wav']
+  - from: demo-context
+    to: demo-context
 # ws is pure JS (its optional native addons aren't installed), so nothing to rebuild.
 npmRebuild: false
 

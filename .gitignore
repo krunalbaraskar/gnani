@@ -9,7 +9,6 @@ coverage/
 !.env.example
 .DS_Store
 Thumbs.db
-/demo-audio/
 test-results/
 # the launch video and its footage (~140 MB); rebuilt with launch-video/build/build.ps1
 /launch-video/

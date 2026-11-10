@@ -5,6 +5,7 @@ import { MODE_INFO } from '../components/Bar.tsx';
 import { Icon } from '../components/Icon.tsx';
 import { Avatar } from '../components/Avatars.tsx';
 import type { SettingsProps } from './MainWindow.tsx';
+import { KeysForm } from './KeysForm.tsx';
 
 type StringKey = { [K in keyof Settings]: Settings[K] extends string ? K : never }[keyof Settings];
 type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
@@ -292,10 +293,11 @@ export function CalendarAccounts(props: SettingsProps) {
 export function KnowledgeFields(props: SettingsProps) {
   const { app, refresh, notify } = props;
   const [busy, setBusy] = useState(false);
-  const choose = async (reload: boolean) => {
+  const choose = async (how: boolean | 'sample') => {
     setBusy(true);
     try {
-      if (reload) await window.echo.reloadContext();
+      if (how === 'sample') await window.echo.useSampleContext();
+      else if (how) await window.echo.reloadContext();
       else await window.echo.chooseContextDir();
       await refresh();
     } catch {
@@ -323,6 +325,16 @@ export function KnowledgeFields(props: SettingsProps) {
           </button>
         )}
       </div>
+      {app.sampleContextDir && app.context.dir !== app.sampleContextDir && (
+        <p className="muted small">
+          Just trying Echo?{' '}
+          <button className="link" disabled={busy} onClick={() => void choose('sample')}>
+            Use the sample files
+          </button>{' '}
+          of a made-up paint distributor (stock, prices, call notes). They go with the demo call in
+          Settings → Audio → Demo.
+        </p>
+      )}
       {app.context.error && (
         <p className="error-text" role="alert">
           {app.context.error}
@@ -382,7 +394,7 @@ export function KeysStatus({ app }: Pick<SettingsProps, 'app'>) {
     <div className="keys-status">
       <p className={app.keys.stt ? 'ok' : 'error-text'}>
         <Icon name={app.keys.stt ? 'check' : 'close'} size={16} /> {app.stt.keyVar}:{' '}
-        {app.keys.stt ? 'found' : 'missing — add it to .env and restart'}
+        {app.keys.stt ? 'found' : 'missing — add it in Settings → AI & speech'}
       </p>
       <p className="muted small">
         Speech-to-text: {app.stt.name} at {app.stt.url}
@@ -602,19 +614,24 @@ export function SettingsPage(
         <section className="settings-section" id="settings-ai" tabIndex={-1}>
           <header>
             <h2>AI & speech</h2>
-            <p className="muted">Keys are loaded from .env and never shown here.</p>
+            <p className="muted">Your API keys, and how Echo listens and answers.</p>
           </header>
-          <KeysStatus app={app} />
+          <KeysForm app={app} refresh={refresh} notify={notify} />
           <DraftField
             {...props}
             name="llmBaseUrl"
-            label="LLM base URL"
+            label="Override base URL (advanced)"
             type="url"
             maxLength={2000}
             placeholder={app.llm.baseUrl || 'https://api.openai.com/v1'}
-            hint="Leave empty to use .env. Your .env key is sent only to the .env server, never to a URL typed here. Use HTTPS, except for this computer or your local network. Ollama: http://localhost:11434/v1."
+            hint="Usually empty: the service above is used. Your saved key is sent only to that service, never to a URL typed here."
           />
-          <DraftField {...props} name="llmModel" label="Model" placeholder={app.llm.model} />
+          <DraftField
+            {...props}
+            name="llmModel"
+            label="Override model (advanced)"
+            placeholder={app.llm.model}
+          />
           <DraftField
             {...props}
             name="llmVisionModel"
@@ -656,8 +673,8 @@ export function SettingsPage(
           </label>
           {s.transcriptScript === 'roman' && (
             <p className="muted small">
-              Your AI model rewrites each Hindi-script line, adding a moment per line. Not in
-              Silent mode.
+              Your AI model rewrites each Hindi-script line, adding a moment per line. Not in Silent
+              mode.
             </p>
           )}
           {language?.supportsItn && (

@@ -10,8 +10,8 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import { existsSync, readFileSync, renameSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { MeetingService } from '../core/meetings/service.ts';
 import { MeetingStore } from '../core/meetings/store.ts';
 import { OpenAiCompatibleProvider } from '../core/llm/openai-compatible.ts';
@@ -26,7 +26,9 @@ import {
   type NewMeetingResult,
   type ContextView,
   type ExportResult,
+  type SaveKeysResult,
   type ShareProtection,
+  type TestKeysResult,
   type StartResult,
   type DemoAudio,
   type StopResult,
@@ -38,7 +40,10 @@ import { CONSENT_VERSION } from '../shared/settings.ts';
 import { SPEAKERS, type Speaker } from '../shared/transcript/types.ts';
 import type { LoadedContext } from '../core/context/context.ts';
 import { contextView, readContextDir } from './context-loader.ts';
-import { loadEnv, sttInfo } from './env.ts';
+import { loadEnv, sttInfo, userEnvFile } from './env.ts';
+import { applyEnvPatch, sanitizeEnvPatch } from '../core/util/env-file.ts';
+import { checkGnani, checkLlm } from '../core/key-check.ts';
+import { isSafeLlmUrl } from '../shared/settings.ts';
 import { writeSessionExport } from './export-writer.ts';
 import {
   createOverlayWindow,
@@ -247,9 +252,12 @@ void app.whenReady().then(() => {
       return fn(...(args as A));
     });
 
-  const demoDir = app.isPackaged
-    ? join(app.getPath('userData'), 'demo-audio')
-    : join(process.cwd(), 'demo-audio');
+  // The installer ships the demo call and the sample business files as resources. A demo
+  // made with `npm run demo-audio` and copied to %APPDATA%\Echo\demo-audio takes precedence.
+  const bundled = app.isPackaged ? process.resourcesPath : process.cwd();
+  const ownDemo = join(app.getPath('userData'), 'demo-audio');
+  const demoDir = app.isPackaged && existsSync(ownDemo) ? ownDemo : join(bundled, 'demo-audio');
+  const sampleDir = join(bundled, 'demo-context');
 
   handle(IPC.getState, (): AppState => {
     const e = loadEnv();
@@ -262,12 +270,19 @@ void app.whenReady().then(() => {
       keys: { stt: stt.key, llm: !!e.llmApiKey },
       stt: { name: stt.name, keyVar: stt.keyVar, url: stt.url },
       llm: { baseUrl: llm.baseUrl, model: llm.model },
+      envLlm: {
+        baseUrl: e.llmBaseUrl,
+        model: e.llmModel,
+        reasoningEffort: e.llmReasoningEffort,
+      },
+      keyFile: userEnvFile(),
       platform: process.platform,
       clickThrough,
       sessionRunning: controller.running,
       sessionPaused: controller.paused,
       sessionStartedAt: controller.startedAt,
       demoAudioDir: demoDir,
+      sampleContextDir: existsSync(sampleDir) ? sampleDir : '',
       context: contextView(s.contextDir, context),
       memoryMeetings: new Set(meetings.memory.map((c) => c.file)).size,
       calendar: calendar.view,
@@ -276,6 +291,66 @@ void app.whenReady().then(() => {
       // The window's protection was fixed at startup; a later .env edit must not change the claim.
       shareProtection: shareProtection(env.recordable),
     };
+  });
+
+  // Keys typed into Echo go to %APPDATA%\Echo\.env. They are written, never read back to a
+  // window; loadEnv() reads the file on every use, so no restart is needed.
+  handle(IPC.saveKeys, async (input: unknown): Promise<SaveKeysResult> => {
+    const { patch, error } = sanitizeEnvPatch(input);
+    if (error) return { ok: false, error };
+    if (patch.LLM_BASE_URL && !isSafeLlmUrl(patch.LLM_BASE_URL))
+      return {
+        ok: false,
+        error: 'The AI service URL must use https (plain http only for this computer or your LAN).',
+      };
+    const file = userEnvFile();
+    try {
+      const before = existsSync(file) ? readFileSync(file, 'utf8') : '';
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, applyEnvPatch(before, patch), 'utf8');
+    } catch (err) {
+      return { ok: false, error: `Could not save the keys: ${(err as Error).message}` };
+    }
+    log.info('keys saved', { names: Object.keys(patch) });
+    // A real environment variable or a .env next to Echo wins over this file.
+    const e = loadEnv();
+    const effective: Record<string, string> = {
+      GNANI_API_KEY: e.gnaniApiKey,
+      LLM_BASE_URL: e.llmBaseUrl,
+      LLM_MODEL: e.llmModel,
+      LLM_API_KEY: e.llmApiKey,
+      LLM_REASONING_EFFORT: e.llmReasoningEffort,
+    };
+    const shadowed = Object.entries(patch)
+      .filter(
+        ([k, v]) => v && effective[k] !== (k === 'LLM_REASONING_EFFORT' ? v.toLowerCase() : v),
+      )
+      .map(([k]) => k);
+    return shadowed.length
+      ? {
+          ok: true,
+          warning: `Saved, but ${shadowed.join(', ')} is also set in an environment variable or a .env file in ${process.cwd()}, which wins.`,
+        }
+      : { ok: true };
+  });
+
+  handle(IPC.testKeys, async (): Promise<TestKeysResult> => {
+    const e = loadEnv();
+    const llm = llmConfig(settings.get(), e);
+    const stt =
+      e.sttProvider === 'gnani'
+        ? checkGnani(e.gnaniApiKey, e.gnaniSttUrl)
+        : Promise.resolve({
+            ok: !!e.whisperApiKey,
+            message: e.whisperApiKey
+              ? 'Whisper key found (checked when a call starts).'
+              : 'No WHISPER_API_KEY.',
+          });
+    const [sttResult, llmResult] = await Promise.all([
+      stt,
+      checkLlm({ ...llm, timeoutMs: 30_000 }),
+    ]);
+    return { stt: sttResult, llm: llmResult };
   });
 
   handle(IPC.updateSettings, (patch: unknown) => {
@@ -427,6 +502,11 @@ void app.whenReady().then(() => {
     return loadContextDir();
   });
   handle(IPC.reloadContext, loadContextDir);
+  // The bundled sample files (a made-up paint distributor), for trying Echo out.
+  handle(IPC.useSampleContext, (): Promise<ContextView> => {
+    if (existsSync(sampleDir)) settings.update({ contextDir: sampleDir });
+    return loadContextDir();
+  });
 
   const capture = () => captureScreen(overlay);
   ipcMain.on(IPC.ask, (e, text: unknown, withScreen: unknown) => {

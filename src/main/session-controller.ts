@@ -82,7 +82,7 @@ export class SessionController {
     if (env.sttProvider === 'gnani' && !env.gnaniApiKey) {
       return {
         ok: false,
-        error: 'GNANI_API_KEY is not set. Add it to your .env file and restart Echo.',
+        error: 'No Gnani API key yet. Add it in the Echo window: You → AI & speech.',
       };
     }
     // A local Whisper server needs no key, so a missing one is only reported if refused.

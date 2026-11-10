@@ -15,6 +15,8 @@ import type { Speaker, TranscriptSegment } from './transcript/types.ts';
 export const IPC = {
   getState: 'echo:get-state',
   updateSettings: 'echo:update-settings',
+  saveKeys: 'echo:save-keys',
+  testKeys: 'echo:test-keys',
   startSession: 'echo:start-session',
   stopSession: 'echo:stop-session',
   requestSuggestion: 'echo:request-suggestion',
@@ -23,6 +25,7 @@ export const IPC = {
   readDemoAudio: 'echo:read-demo-audio',
   chooseContextDir: 'echo:choose-context-dir',
   reloadContext: 'echo:reload-context',
+  useSampleContext: 'echo:use-sample-context',
   ask: 'echo:ask',
   askScreen: 'echo:ask-screen',
   requestMeaning: 'echo:request-meaning',
@@ -95,6 +98,10 @@ export interface AppState {
   stt: { name: string; keyVar: string; url: string };
   /** Effective LLM endpoint and model after applying env defaults. */
   llm: { baseUrl: string; model: string };
+  /** The AI service as set in .env (not secret), for the key form to start from. */
+  envLlm: { baseUrl: string; model: string; reasoningEffort: string };
+  /** Where keys typed into Echo are saved (%APPDATA%\Echo\.env). */
+  keyFile: string;
   platform: string;
   clickThrough: boolean;
   sessionRunning: boolean;
@@ -103,6 +110,8 @@ export interface AppState {
   sessionStartedAt: number | null;
   /** Where demo WAVs are looked for (see npm run demo-audio). */
   demoAudioDir: string;
+  /** The sample files shipped with Echo, or '' when this build has none. */
+  sampleContextDir: string;
   context: ContextView;
   /** Past meetings whose minutes or notes answers can use (when useMeetings is on). */
   memoryMeetings: number;
@@ -182,6 +191,30 @@ export type EchoEvent =
 export type { ActionItemView, ConnectResult, NewMeetingResult, TodoItem };
 
 export type StartResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Keys typed into Echo. Only these names are accepted; an empty string removes one. Keys
+ * are written to the .env in Echo's settings folder and never sent back to any window.
+ */
+export interface KeysPatch {
+  GNANI_API_KEY?: string;
+  LLM_BASE_URL?: string;
+  LLM_MODEL?: string;
+  LLM_API_KEY?: string;
+  LLM_REASONING_EFFORT?: string;
+}
+
+export type SaveKeysResult = { ok: true; warning?: string } | { ok: false; error: string };
+
+export interface KeyCheck {
+  ok: boolean;
+  message: string;
+}
+
+export interface TestKeysResult {
+  stt: KeyCheck;
+  llm: KeyCheck;
+}
 
 export interface StopResult {
   /** The meeting as saved in the library. */

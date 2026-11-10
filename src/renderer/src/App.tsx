@@ -256,7 +256,7 @@ export function App() {
       dispatch({
         type: 'notice',
         level: 'error',
-        message: `No demo audio in ${state.app?.demoAudioDir}. Run "npm run demo-audio" first (see README).`,
+        message: `No demo audio (me.wav, them.wav) in ${state.app?.demoAudioDir}. In a source checkout, run "npm run demo-audio" (see README).`,
       });
       return;
     }
@@ -530,7 +530,7 @@ export function App() {
               >
                 {!app.keys.stt && (
                   <p className="error-text">
-                    {app.stt.keyVar} is missing. Add it to .env and restart Echo.
+                    {app.stt.keyVar} is missing. Add it in the Echo window: You → AI & speech.
                   </p>
                 )}
                 {!app.context.dir && !state.running && (

@@ -216,9 +216,10 @@ export function SettingsPanel({
       </fieldset>
 
       <fieldset>
-        <legend>Keys (from .env — never shown here)</legend>
+        <legend>Keys (never shown here)</legend>
         <p className={app.keys.stt ? 'ok' : 'error-text'}>
-          {app.stt.keyVar}: {app.keys.stt ? 'found' : 'missing — add it to .env and restart'}
+          {app.stt.keyVar}:{' '}
+          {app.keys.stt ? 'found' : 'missing — add it in the Echo window: You → AI & speech'}
         </p>
         <p className="muted small">
           Speech-to-text: {app.stt.name} at {app.stt.url}

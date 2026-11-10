@@ -132,9 +132,13 @@ function parseDelta(data: string): { text?: string; error?: string } {
 
 function extractErrorMessage(body: string): string {
   try {
-    const j = JSON.parse(body) as { error?: { message?: string } | string };
-    if (typeof j.error === 'string') return j.error;
-    if (j.error?.message) return j.error.message;
+    const parsed = JSON.parse(body) as unknown;
+    // Gemini's OpenAI endpoint wraps the error in an array.
+    const j = (Array.isArray(parsed) ? parsed[0] : parsed) as {
+      error?: { message?: string } | string;
+    };
+    if (typeof j?.error === 'string') return j.error;
+    if (j?.error?.message) return j.error.message;
   } catch {
     // not JSON
   }

@@ -41,9 +41,14 @@ function readEnvFile(path: string): Record<string, string> {
   }
 }
 
+/** %APPDATA%\Echo\.env: where keys typed into Echo are saved. */
+export function userEnvFile(): string {
+  return join(app.getPath('userData'), '.env');
+}
+
 /** Real env vars, then <cwd>/.env (dev), then %APPDATA%/Echo/.env (installed app). */
 export function envFilePaths(): string[] {
-  return [join(process.cwd(), '.env'), join(app.getPath('userData'), '.env')];
+  return [join(process.cwd(), '.env'), userEnvFile()];
 }
 
 export function sameOrigin(a: string, b: string): boolean {

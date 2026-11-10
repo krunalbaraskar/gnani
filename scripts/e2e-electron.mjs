@@ -230,7 +230,7 @@ try {
   await shot('1b-calendar-offer');
   await offer.getByTitle('Not for this meeting').click();
   await offer.waitFor({ state: 'detached' });
-  await page.getByText('Keys (from .env').waitFor();
+  await page.getByText('Keys (never shown here)').waitFor();
   await page.getByRole('img', { name: 'Visible in recordings (demo mode)' }).waitFor();
   check(true, 'demo mode is announced while content protection is off');
 
@@ -464,10 +464,8 @@ try {
   check(true, 'asking your meetings answers with a link to the meeting');
 
   // Changes in the main window also refresh the overlay's settings without refocusing it.
-  await lib
-    .getByRole('navigation', { name: 'Main navigation' })
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click();
+  // Settings live behind the profile button at the bottom of the rail.
+  await lib.getByRole('button', { name: 'Your profile', exact: true }).click();
   await lib.getByLabel('My name', { exact: true }).fill('Asha');
   await lib.getByLabel('My name', { exact: true }).press('Enter');
   await page.getByRole('tab', { name: 'Context' }).click();

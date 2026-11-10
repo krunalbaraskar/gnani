@@ -51,6 +51,8 @@ const appState = {
   keys: { stt: true, llm: true },
   stt: { name: 'Gnani', keyVar: 'GNANI_API_KEY', url: 'wss://speech.example.test' },
   llm: { baseUrl: 'http://localhost:11434/v1', model: 'local-model' },
+  envLlm: { baseUrl: 'http://localhost:11434/v1', model: 'local-model', reasoningEffort: '' },
+  keyFile: 'C:\\Users\\test\\AppData\\Roaming\\Echo\\.env',
   languages: [
     { code: 'hi-IN', label: 'Hindi', supportsItn: true },
     { code: 'en-IN', label: 'English', supportsItn: true },
@@ -61,6 +63,7 @@ const appState = {
   sessionRunning: false,
   sessionPaused: false,
   demoAudioDir: '',
+  sampleContextDir: '',
   context: { dir: '', files: [], skipped: [] },
   memoryMeetings: 7,
   calendar: {
@@ -137,6 +140,9 @@ contextBridge.exposeInMainWorld('echo', {
   disconnectAccount: async id => { state.integrations.accounts = state.integrations.accounts.filter(a => a.id !== id); emit({type: 'integrations', integrations: state.integrations}); },
   chooseContextDir: async () => { state.context = {dir: 'C:/Echo/context', files: [{name: 'price-list.md', info: '2 KB'}], skipped: []}; return state.context; },
   reloadContext: async () => state.context,
+  useSampleContext: async () => state.context,
+  saveKeys: async () => ({ok: true}),
+  testKeys: async () => ({stt: {ok: true, message: 'ok'}, llm: {ok: true, message: 'ok'}}),
   chooseCalendarFile: async clear => { state.settings.calendarFile = clear ? '' : 'calendar.ics'; return state.calendar; },
   refreshCalendar: async () => state.calendar,
   chooseExportDir: async () => { state.settings.exportDir = 'C:/Echo/exports'; return state.settings.exportDir; },
@@ -404,6 +410,13 @@ try {
     await page.evaluate(async () => (await window.echo.getState()).settings.consentVersion),
     CONSENT_VERSION,
   );
+  // Keys come straight after consent: a fresh install has none.
+  await page.getByRole('heading', { name: 'API keys', exact: true }).waitFor();
+  await page.getByLabel('Gnani API key', { exact: true }).waitFor();
+  await shot('onboarding-keys');
+  await page.getByRole('button', { name: 'Save and test', exact: true }).click();
+  await page.getByText('Speech-to-text:', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByLabel('My name', { exact: true }).fill('Priya');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByRole('heading', { name: 'Your calendar', exact: true }).waitFor();

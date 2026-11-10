@@ -487,6 +487,25 @@ export function MainWindow() {
                 : 'Your workspace'}
           </span>
         </header>
+        {route.section === 'home' && (!app.keys.stt || !app.llm.model) && (
+          <div className="keys-banner" role="status">
+            <Icon name="sparkle" />
+            <span>
+              {!app.keys.stt
+                ? `Add your ${app.stt.name} API key so Echo can transcribe calls.`
+                : 'Choose an AI model so Echo can answer and write minutes.'}
+            </span>
+            <button
+              className="primary"
+              onClick={() => {
+                setSettingsAnchor('ai');
+                navigate('settings');
+              }}
+            >
+              Add API keys
+            </button>
+          </div>
+        )}
         {route.section === 'home' && (
           <Home
             app={app}
